@@ -1,0 +1,19 @@
+{
+  "parser": "babel-eslint",
+  "extends": "airbnb",
+  "env": {
+    "browser": true,
+    "mocha": true
+  },
+  "globals": {
+    "chai": true
+  },
+  "rules": {
+    "no-underscore-dangle": 0,
+    "import/no-extraneous-dependencies": 0,
+    "react/jsx-filename-extension": 0,
+    "react/forbid-prop-types": 0,
+    "react/require-default-props": 0,
+    "react/no-unused-prop-types": 0
+  }
+}
