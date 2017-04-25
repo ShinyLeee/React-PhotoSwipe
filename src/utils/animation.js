@@ -8,7 +8,7 @@ export default function startAnimation(start, end, duration, easingType, onUpdat
   // console.log(start, end);
   let currentTime = 0;
 
-  const isMultiple = typeof start === 'object';
+  const isMultiple = typeof start === 'object' && typeof end === 'object';
 
   function tick() {
     currentTime += (1 / 60) * (1000 / duration);
@@ -29,6 +29,7 @@ export default function startAnimation(start, end, duration, easingType, onUpdat
     } else if (onComplete === undefined) {
       onUpdate(end);
     } else {
+      onUpdate(end);
       onComplete(end);
     }
   }

@@ -17,15 +17,17 @@ export default class Home extends Component {
       open: false,
       startIndex: undefined,
       items: props.images,
+      template: true,
     };
     this.handleOpenGallery = this.handleOpenGallery.bind(this);
   }
 
-  handleOpenGallery(items, index) {
+  handleOpenGallery(items, index, template) {
     this.setState({
       open: true,
       startIndex: index,
       items,
+      template,
     });
   }
 
@@ -43,7 +45,7 @@ export default class Home extends Component {
                   style={{ width: `${(image.width * 200) / image.height}px`, flexGrow: `${(image.width * 200) / image.height}` }}
                 >
                   <PlaceHolder style={{ paddingBottom: `${(image.height / image.width) * 100}%` }} />
-                  <Image src={image.src} alt={`${image.id}.jpg`} onClick={() => this.handleOpenGallery(images, i)} />
+                  <Image src={image.src} alt={`${image.id}.jpg`} onClick={() => this.handleOpenGallery(images, i, false)} />
                 </ImageHolder>
               ))
             }
@@ -53,13 +55,13 @@ export default class Home extends Component {
           <SectionHeader>Minimal Gallery Example</SectionHeader>
           <JustifiedGallery>
             {
-              [images[0], images[1]].map((image, i) => (
+              [images[0], images[1], images[2]].map((image, i) => (
                 <ImageHolder
                   key={image.id}
                   style={{ width: `${(image.width * 200) / image.height}px`, flexGrow: `${(image.width * 200) / image.height}` }}
                 >
                   <PlaceHolder style={{ paddingBottom: `${(image.height / image.width) * 100}%` }} />
-                  <Image src={image.src} alt={`${image.id}.jpg`} onClick={() => this.handleOpenGallery([images[0], images[1]], i)} />
+                  <Image src={image.src} alt={`${image.id}.jpg`} onClick={() => this.handleOpenGallery([images[0], images[1], images[2]], i, false)} />
                 </ImageHolder>
               ))
             }
@@ -70,7 +72,7 @@ export default class Home extends Component {
           items={this.state.items}
           initIndex={this.state.startIndex}
           onInnerClose={() => this.setState({ open: false })}
-          template={<Template />}
+          template={this.state.template ? <Template /> : false}
         />
       </main>
     );
@@ -98,8 +100,8 @@ Home.defaultProps = {
     {
       id: 2,
       src: '../img/2.jpg',
-      width: 1674,
-      height: 6362,
+      width: 640,
+      height: 1922,
     },
     { id: 3,
       src: '../img/3.jpg',
@@ -110,6 +112,12 @@ Home.defaultProps = {
       src: '../img/4.jpg',
       width: 2400,
       height: 1600,
+    },
+    {
+      id: 5,
+      src: '../img/5.jpg',
+      width: 1674,
+      height: 6362,
     },
   ],
 };

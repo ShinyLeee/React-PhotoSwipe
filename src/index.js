@@ -34,6 +34,8 @@ export default class PhotoSwipe extends Component {
     this.handleItemPanStart = this.handleItemPanStart.bind(this);
     this.handleItemPan = this.handleItemPan.bind(this);
     this.handleItemSwipe = this.handleItemSwipe.bind(this);
+    this.handleItemPinchStart = this.handleItemPinchStart.bind(this);
+    this.handleItemPinch = this.handleItemPinch.bind(this);
     this.handleItemPinchEnd = this.handleItemPinchEnd.bind(this);
   }
 
@@ -93,9 +95,11 @@ export default class PhotoSwipe extends Component {
         onPanStart={this.handleItemPanStart}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinch={this.handleItemPinchEnd}
+        onPinchStart={this.handleItemPinchStart}
+        onPinch={this.handleItemPinch}
+        onPinchEnd={this.handleItemPinchEnd}
         {...other}
-      /> : <div key="prevItemPlaceHolder" />,
+      /> : <div key="React-PhotoSwipe_prevItemPlaceHolder" />,
       <ItemHolder
         key={items[initIndex].id}
         item={items[initIndex]}
@@ -106,7 +110,9 @@ export default class PhotoSwipe extends Component {
         onPanStart={this.handleItemPanStart}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinch={this.handleItemPinchEnd}
+        onPinchStart={this.handleItemPinchStart}
+        onPinch={this.handleItemPinch}
+        onPinchEnd={this.handleItemPinchEnd}
         {...other}
       />,
       nextIndex !== undefined ? <ItemHolder
@@ -119,9 +125,11 @@ export default class PhotoSwipe extends Component {
         onPanStart={this.handleItemPanStart}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinch={this.handleItemPinchEnd}
+        onPinchStart={this.handleItemPinchStart}
+        onPinch={this.handleItemPinch}
+        onPinchEnd={this.handleItemPinchEnd}
         {...other}
-      /> : <div key="nextItemPlaceHolder" />,
+      /> : <div key="React-PhotoSwipe_nextItemPlaceHolder" />,
     ];
   }
 
@@ -155,7 +163,9 @@ export default class PhotoSwipe extends Component {
         onPanStart={this.handleItemPanStart}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinch={this.handleItemPinchEnd}
+        onPinchStart={this.handleItemPinchStart}
+        onPinch={this.handleItemPinch}
+        onPinchEnd={this.handleItemPinchEnd}
         {...other}
       />
     );
@@ -216,6 +226,7 @@ export default class PhotoSwipe extends Component {
           (panDelta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
           (panDelta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
+          // TODO should we use rAF in here?
           const xPos = this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL);
           this.applyItemWrapperTransform(xPos, 0);
           return;
@@ -314,11 +325,22 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  handleItemPinchEnd(e) {
+  handleItemPinchStart() {
+    this.setState({ isPanning: true });
+  }
+
+  handleItemPinch(scale) {
+    this.background.style.opacity = scale;
+  }
+
+  handleItemPinchEnd(scale) {
     const { pinchToCloseThresholder } = this.props;
-    if (e.scale < pinchToCloseThresholder) {
+    if (scale < pinchToCloseThresholder) {
       this.handleInnerClose();
+    } else {
+      this.background.style.opacity = 1;
     }
+    this.setState({ isPanning: false });
   }
 
   render() {

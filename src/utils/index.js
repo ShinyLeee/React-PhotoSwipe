@@ -6,7 +6,11 @@ export const now = Date.now || function legacy() {
   return new Date().getTime();
 };
 
-export const getEmptyPoint = () => ({ x: null, y: null });
+export const getEmptyPoint = double => (
+  !double
+  ? { x: null, y: null }
+  : { x1: null, y1: null, x2: null, y2: null }
+);
 
 export const on = (target, types, listener) => {
   const typeArray = types.split(' ');

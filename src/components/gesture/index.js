@@ -38,7 +38,8 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       this.lastPanPos = getEmptyPoint(); // for pan and swipe event
       this.panAccDelta = getEmptyPoint();
       this.panDirection = undefined;
-      this.currPos = { x1: null, y1: null, x2: null, y2: null };
+      this.pinchCenter = getEmptyPoint();
+      this.currPos = getEmptyPoint(true);
       this.handleTouchStart = this.handleTouchStart.bind(this);
       this.handleTouchMove = this.handleTouchMove.bind(this);
       this.handleTouchCancel = this.handleTouchCancel.bind(this);
@@ -91,6 +92,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
 
     handleTouchStart(e) {
       e.persist();
+      e.preventDefault();
       const currPos = this.currPos;
       const fingerNum = e.touches.length;
       const pageX = e.touches[0].pageX;
@@ -116,19 +118,23 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
 
     handleTouchMove(e) {
       e.persist();
-      // TODO vertical panning will scroll page
+      // Avoid vertical touchmove scroll page and pinch zoom page.
       e.preventDefault();
       const fingerNum = e.touches.length;
       const currPos = this.currPos;
       currPos.x1 = e.touches[0].pageX;
       currPos.y1 = e.touches[0].pageY;
       if (fingerNum > 1) {
-        e.preventDefault(); // prevent scroll when multi touch
         const evt = e;
         currPos.x2 = e.touches[1].pageX;
         currPos.y2 = e.touches[1].pageY;
         evt.scale = this.twoFingersDistance / this.initPinchLen;
-        evt.center = { x: (currPos.x1 + currPos.x2) / 2, y: (currPos.y1 + currPos.y2) / 2 };
+        evt.center = {
+          x: Math.round((e.touches[0].clientX + e.touches[1].clientX) * 0.5),
+          y: Math.round((e.touches[0].clientY + e.touches[1].clientY) * 0.5),
+        };
+        this.pinchCenter = evt.center;
+        this.emit('onPinchStart', evt);
         this.emit('onPinch', evt);
       } else {
         const evt = e;
@@ -172,6 +178,8 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       const evt = e;
       if (this.currPos.x2 !== null && this.currPos.y2 !== null) {
         evt.scale = this.twoFingersDistance / this.initPinchLen;
+        evt.center = this.pinchCenter;
+        this.pinchCenter = getEmptyPoint();
         this.emit('onPinchEnd', evt);
       } else if (this.isTap) {
         const emitTapEvent = () => {
@@ -194,7 +202,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       this.lastPanPos = getEmptyPoint();
       this.panAccDelta = getEmptyPoint();
       this.panDirection = undefined;
-      this.currPos = { x1: null, y1: null, x2: null, y2: null };
+      this.currPos = getEmptyPoint(true);
     }
 
     render() {
@@ -219,6 +227,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     onPan: PropTypes.func,
     onPanEnd: PropTypes.func,
     onSwipe: PropTypes.func,
+    onPinchStart: PropTypes.func,
     onPinch: PropTypes.func,
     onPinchEnd: PropTypes.func,
   };
