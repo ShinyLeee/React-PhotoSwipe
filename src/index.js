@@ -6,13 +6,13 @@ import {
   Overlay,
   Container,
 } from './styled';
-import { on, off } from './utils';
+import { on, off, isDomElement } from './utils';
 import {
   PAN_FRICTION_LEVEL,
   SWIPE_TO_DURATION,
   BOUNCE_BACK_DURATION,
 } from './utils/constant';
-import startAnimation from './utils/animation';
+import requestAnimation from './utils/animation';
 
 export default class PhotoSwipe extends Component {
 
@@ -22,40 +22,45 @@ export default class PhotoSwipe extends Component {
     this.state = {
       open: false,
       currIndex: props.initIndex,
-      viewportX: window.innerWidth,
-      viewportY: window.innerHeight,
+      vwWidth: window.innerWidth,
+      vwHeight: window.innerHeight,
       itemHolders: undefined,
-      isPanning: false,
       isTemplateOpen: props.template ? true : undefined,
     };
-    this.viewChangeHandler = this.checkViewport.bind(this);
+    this.handleViewChange = this.handleViewChange.bind(this);
     this.handleInnerClose = this.handleInnerClose.bind(this);
     this.handleItemTap = this.handleItemTap.bind(this);
-    this.handleItemPanStart = this.handleItemPanStart.bind(this);
+    this.handleItemDoubleTap = this.handleItemDoubleTap.bind(this);
     this.handleItemPan = this.handleItemPan.bind(this);
     this.handleItemSwipe = this.handleItemSwipe.bind(this);
-    this.handleItemPinchStart = this.handleItemPinchStart.bind(this);
-    this.handleItemPinch = this.handleItemPinch.bind(this);
-    this.handleItemPinchEnd = this.handleItemPinchEnd.bind(this);
   }
 
   componentDidMount() {
-    on(window, 'scroll resize orientationchange', this.viewChangeHandler);
+    on(window, 'scroll resize orientationchange', this.handleViewChange);
   }
 
   componentWillReceiveProps(nextProps) {
-    const { open } = this.props;
-    if (nextProps.open !== open) {
+    if (nextProps.open !== this.props.open) {
       this.setState(prevState => ({
         open: nextProps.open,
         currIndex: nextProps.open ? nextProps.initIndex : prevState.currIndex,
-        itemHolders: nextProps.open ? this.initItemHolders(nextProps) : prevState.itemHolders,
+        itemHolders: nextProps.open
+        ? this.initItemHolders(nextProps)
+        : prevState.itemHolders.map(item => React.cloneElement(item, { open: false })),
       }));
     }
   }
 
+  componentDidUpdate(prevProps) {
+    // Reset some value when close gallery
+    if (prevProps.open !== this.props.open && !this.props.open) {
+      this.indexDiff = 0;
+      this.applyItemWrapperTransform(0, 0);
+    }
+  }
+
   componentWillUnmount() {
-    off(window, 'scroll resize orientationchange', this.viewChangeHandler);
+    off(window, 'scroll resize orientationchange', this.handleViewChange);
   }
 
   getItemIndex(index, nextProps) {
@@ -76,58 +81,61 @@ export default class PhotoSwipe extends Component {
   }
 
   get wrapperXPos() {
-    return -Math.round(this.indexDiff * this.state.viewportX * (1 + this.props.spacing));
+    return -Math.round(this.indexDiff * this.state.vwWidth * (1 + this.props.spacing));
   }
 
   initItemHolders(nextProps) {
-    const { initIndex, items, ...other } = nextProps;
-    const { viewportX, viewportY } = this.state;
+    const { open, initIndex, items, ...other } = nextProps;
+    const { vwWidth, vwHeight } = this.state;
     const prevIndex = this.getItemIndex(initIndex - 1, nextProps);
     const nextIndex = this.getItemIndex(initIndex + 1, nextProps);
     return [
       prevIndex !== undefined ? <ItemHolder
         key={items[prevIndex].id}
+        open={open}
         itemIndex={prevIndex}
+        currIndex={initIndex}
         indexDiff={-1}
         item={items[prevIndex]}
-        viewportSize={{ width: viewportX, height: viewportY }}
+        viewportSize={{ width: vwWidth, height: vwHeight }}
+        overlay={this.overlay}
         onTap={this.handleItemTap}
-        onPanStart={this.handleItemPanStart}
+        onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinchStart={this.handleItemPinchStart}
-        onPinch={this.handleItemPinch}
-        onPinchEnd={this.handleItemPinchEnd}
+        onInnerClose={this.handleInnerClose}
         {...other}
       /> : <div key="React-PhotoSwipe_prevItemPlaceHolder" />,
       <ItemHolder
         key={items[initIndex].id}
         item={items[initIndex]}
+        open={open}
         itemIndex={initIndex}
+        currIndex={initIndex}
         indexDiff={0}
-        viewportSize={{ width: viewportX, height: viewportY }}
+        viewportSize={{ width: vwWidth, height: vwHeight }}
+        overlay={this.overlay}
         onTap={this.handleItemTap}
-        onPanStart={this.handleItemPanStart}
+        onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinchStart={this.handleItemPinchStart}
-        onPinch={this.handleItemPinch}
-        onPinchEnd={this.handleItemPinchEnd}
+        onInnerClose={this.handleInnerClose}
         {...other}
       />,
       nextIndex !== undefined ? <ItemHolder
         key={items[nextIndex].id}
         item={items[nextIndex]}
+        open={open}
         itemIndex={nextIndex}
+        currIndex={initIndex}
         indexDiff={1}
-        viewportSize={{ width: viewportX, height: viewportY }}
+        viewportSize={{ width: vwWidth, height: vwHeight }}
+        overlay={this.overlay}
         onTap={this.handleItemTap}
-        onPanStart={this.handleItemPanStart}
+        onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinchStart={this.handleItemPinchStart}
-        onPinch={this.handleItemPinch}
-        onPinchEnd={this.handleItemPinchEnd}
+        onInnerClose={this.handleInnerClose}
         {...other}
       /> : <div key="React-PhotoSwipe_nextItemPlaceHolder" />,
     ];
@@ -137,15 +145,16 @@ export default class PhotoSwipe extends Component {
    *
    * @param {Object} prevState - previous react state object
    * @param {Number} indexDiff - swipe to left / next(1) or right / prev(-1)
+   * @param {Number} nextIndex - The item index that swipe to
    * @param {Number} replIndex - The item index that wait to be replaced
-   * @param {Number} appdIndex  - The item index that wait to be appended
+   * @param {Number} appdIndex - The item index that wait to be appended
    *
    * @return {Object} newItemHolders - An updatedItemHolders react component object
    */
-  updateItemHolders(prevState, indexDiff, replIndex, appdIndex) {
+  updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex) {
     const { items, loop, ...other } = this.props;
-    const { viewportX, viewportY, itemHolders } = prevState;
-    const newItemHolders = [...itemHolders];
+    const { open, vwWidth, vwHeight, itemHolders } = prevState;
+    let newItemHolders = [...itemHolders];
 
     const replArrIndex = itemHolders.map(item => item.props.itemIndex).indexOf(replIndex);
 
@@ -156,32 +165,36 @@ export default class PhotoSwipe extends Component {
       <ItemHolder
         key={items[appdIndex].id}
         item={items[appdIndex]}
+        open={open}
         itemIndex={appdIndex}
+        currIndex={nextIndex}
         indexDiff={indexDiff > 0 ? this.indexDiff + 1 : this.indexDiff - 1}
-        viewportSize={{ width: viewportX, height: viewportY }}
+        viewportSize={{ width: vwWidth, height: vwHeight }}
+        overlay={this.overlay}
         onTap={this.handleItemTap}
-        onPanStart={this.handleItemPanStart}
+        onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onPinchStart={this.handleItemPinchStart}
-        onPinch={this.handleItemPinch}
-        onPinchEnd={this.handleItemPinchEnd}
+        onInnerClose={this.handleInnerClose}
         {...other}
       />
     );
     newItemHolders.splice(replArrIndex, 1, newItemHolder);
+    // Force to update currIndex prop
+    // not use React.children.map cuz it will change the original key and cause remount.
+    newItemHolders = newItemHolders.map(item => React.cloneElement(item, { currIndex: nextIndex }));
     return newItemHolders;
   }
 
-  checkViewport() {
-    const { viewportX, viewportY } = this.state;
+  handleViewChange() {
+    const { vwWidth, vwHeight } = this.state;
     const innerWidth = window.innerWidth;
     const innerHeight = window.innerHeight;
-    if (viewportY !== innerHeight || viewportX !== innerWidth) {
+    if (vwHeight !== innerHeight || vwWidth !== innerWidth) {
       // console.log(`x: ${innerWidth}`, `y: ${innerHeight}`);
       this.setState({
-        viewportX: innerWidth,
-        viewportY: innerHeight,
+        vwWidth: innerWidth,
+        vwHeight: innerHeight,
       });
     }
   }
@@ -191,9 +204,7 @@ export default class PhotoSwipe extends Component {
   }
 
   handleInnerClose() {
-    this.indexDiff = 0;
-    this.setState({ open: false });
-    this.applyItemWrapperTransform(0, 0);
+    this.setState({ open: false, isTemplateOpen: true });
     if (this.props.onInnerClose) {
       this.props.onInnerClose();
     }
@@ -206,19 +217,14 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  handleItemPanStart() {
-    this.setState({ isPanning: true });
+  handleItemDoubleTap() {
+    console.log(this);
   }
 
-  /**
-   *
-   * @param {String} direction - pan direction `lr` or `ud`
-   * @param {Object} panDelta  - contain `x`, 'y' and accumulated `accX`, `accY`
-   * @param {Object} itemDimension - item display `width`, `height`
-   */
-  handleItemPan(direction, panDelta, itemDimension) {
+  handleItemPan(direction, panDelta) {
     const { items, loop } = this.props;
     const { currIndex } = this.state;
+    let xPos = this.wrapperXPos + panDelta.accX;
     if (direction === 'lr') {
       // Restirct pan moving speed
       if (!loop || items.length < 3) {
@@ -226,62 +232,52 @@ export default class PhotoSwipe extends Component {
           (panDelta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
           (panDelta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
-          // TODO should we use rAF in here?
-          const xPos = this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL);
+          // TODO should we use requestAnimation in here?
+          xPos = this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL);
           this.applyItemWrapperTransform(xPos, 0);
           return;
         }
       }
-      const xPos = this.wrapperXPos + panDelta.accX;
       this.applyItemWrapperTransform(xPos, 0);
     } else if (direction === 'ud') {
-      const absAccY = Math.abs(panDelta.accY);
-      const opacity = 1 - (absAccY / itemDimension.height);
-      this.background.style.opacity = opacity;
-      if (absAccY > 0) {
+      if (this.state.isTemplateOpen) {
         this.setState({ isTemplateOpen: false });
       }
     }
   }
 
-  /**
-   *
-   * @param {String} direction - swipe direction `lr` or `ud`
-   * @param {Object} swipeDelta  - accumulated `accX`, `accY`
-   * @param {Object} itemDimension - item display `width`, `height`
-   */
-  handleItemSwipe(direction, swipeDelta, itemDimension) {
+  handleItemSwipe(direction, delta) {
     const {
       items,
       loop,
       swipeToThreshold,
-      swipeToCloseThreshold,
     } = this.props;
-    const { currIndex } = this.state;
-    // TODO should we move this into onPanEnd?
-    this.setState({ isPanning: false });
+    const { currIndex, vwWidth } = this.state;
     if (direction === 'Left' || direction === 'Right') {
-      if (Math.abs(swipeDelta.accX) > swipeToThreshold * itemDimension.width) {
+      const isExceed = Math.abs(delta.accX) > (swipeToThreshold * vwWidth);
+      if (isExceed) {
         if (!loop || items.length < 3) {
           if (
             (direction === 'Right' && this.getItemIndex(currIndex - 1) === undefined) ||
             (direction === 'Left' && this.getItemIndex(currIndex + 1) === undefined)
           ) {
-            const sPos = this.wrapperXPos + (swipeDelta.accX * PAN_FRICTION_LEVEL);
-            const ePos = this.wrapperXPos;
-            startAnimation(sPos, ePos, SWIPE_TO_DURATION, 'easeOutCubic', (pos) => {
-              this.applyItemWrapperTransform(pos, 0);
-            });
+            requestAnimation(
+              this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL),
+              this.wrapperXPos,
+              BOUNCE_BACK_DURATION,
+              'sineOut',
+              pos => this.applyItemWrapperTransform(pos, 0),
+            );
             return;
           }
         }
 
         const isToLeft = direction === 'Left';
-        const sPos = this.wrapperXPos + swipeDelta.accX;
+        const sPos = this.wrapperXPos + delta.accX;
         if (isToLeft) this.indexDiff += 1;
         else this.indexDiff -= 1;
         const ePos = this.wrapperXPos; // Need update this.indexDiff in advance
-        startAnimation(
+        requestAnimation(
           sPos,
           ePos,
           SWIPE_TO_DURATION,
@@ -301,7 +297,7 @@ export default class PhotoSwipe extends Component {
                                 : this.getItemIndex(prevState.currIndex - 2);
               const nextItemHolders = items.length < 3
                                       ? prevState.itemHolders
-                                      : this.updateItemHolders(prevState, indexDiff, replIndex, appdIndex); // eslint-disable-line max-len
+                                      : this.updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex); // eslint-disable-line max-len
               return {
                 currIndex: nextIndex,
                 itemHolders: nextItemHolders,
@@ -310,53 +306,29 @@ export default class PhotoSwipe extends Component {
           },
         );
       } else {
-        const sPos = this.wrapperXPos + swipeDelta.accX;
-        const ePos = this.wrapperXPos;
-        startAnimation(sPos, ePos, BOUNCE_BACK_DURATION, 'easeOutCubic', (pos) => {
-          this.applyItemWrapperTransform(pos, 0);
-        });
+        requestAnimation(
+          this.wrapperXPos + delta.accX,
+          this.wrapperXPos,
+          BOUNCE_BACK_DURATION,
+          'easeOutCubic',
+          pos => this.applyItemWrapperTransform(pos, 0),
+        );
       }
-    } else if (direction === 'Up' || direction === 'Down') {
-      if (Math.abs(swipeDelta.accY) > swipeToCloseThreshold * itemDimension.height) {
-        this.handleInnerClose();
-      }
-      this.background.style.opacity = 1;
-      this.setState({ isTemplateOpen: true });
     }
-  }
-
-  handleItemPinchStart() {
-    this.setState({ isPanning: true });
-  }
-
-  handleItemPinch(scale) {
-    this.background.style.opacity = scale;
-  }
-
-  handleItemPinchEnd(scale) {
-    const { pinchToCloseThresholder } = this.props;
-    if (scale < pinchToCloseThresholder) {
-      this.handleInnerClose();
-    } else {
-      this.background.style.opacity = 1;
-    }
-    this.setState({ isPanning: false });
   }
 
   render() {
-    const {
-      initIndex,
-      items,
-      template,
-    } = this.props;
+    const { initIndex, items, template } = this.props;
     return (
       <Wrapper open={this.state.open}>
         <Overlay
           open={this.state.open}
-          isPanning={this.state.isPanning}
-          innerRef={(node) => { this.background = node; }}
+          innerRef={(node) => { this.overlay = node; }}
         />
-        <Container innerRef={(node) => { this.itemWrapper = node; }}>
+        <Container
+          open={this.state.open}
+          innerRef={(node) => { this.itemWrapper = node; }}
+        >
           { initIndex !== undefined && this.state.itemHolders }
         </Container>
         {
@@ -401,18 +373,18 @@ PhotoSwipe.defaultProps = {
   // For example, 0.12 will render as a 12% of sliding viewport width.
   spacing: 0.12,
 
-  // Maximum swipe distance based on percentage of item width,
+  // Maximum swipe distance based on percentage of viewport width,
   // exceed it swipe left or right will swipe to next or prev image.
   swipeToThreshold: 0.4,
 
-  // Maximum swipe distance based on percentage of item height,
+  // Maximum swipe distance based on percentage of viewport height,
   // exceed it swipe down or up will swipe to close gallery.
-  swipeToCloseThreshold: 0.4,
+  swipeToCloseThreshold: 0.2,
 
   // Minimum pinch scale based on percentage of original item
   // below it when pinchEnd will close gallery.
   // Set zero pinch will never close gallery.
-  pinchToCloseThresholder: 0.4,
+  pinchToCloseThresholder: 0.7,
 
   // Maximum zoom level when performing zoom gesture
   maxZoomLevel: 2,
@@ -430,6 +402,7 @@ PhotoSwipe.propTypes = {
     width: PropTypes.number.isRequired,
     height: PropTypes.number.isRequired,
   })).isRequired,
+  sourceElement: isDomElement,
   loop: PropTypes.bool,
   template: PropTypes.oneOfType([
     PropTypes.bool,

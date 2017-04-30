@@ -11,7 +11,8 @@ import {
   ZOOM_LEVEL_INCRE,
   BOUNCE_BACK_DURATION,
 } from '../../utils/constant';
-import startAnimation from '../../utils/animation';
+import { isDomElement } from '../../utils';
+import requestAnimation from '../../utils/animation';
 
 const EnhancedWrapper = withGesture(Wrapper);
 
@@ -41,23 +42,30 @@ export default class ItemHolder extends Component {
     this.handlePinchEnd = this.handlePinchEnd.bind(this);
   }
 
+  componentDidMount() {
+    const { itemIndex, currIndex } = this.props;
+    if (itemIndex === currIndex) {
+      this.requestInAnimation();
+    }
+  }
+
   shouldComponentUpdate() {
-    // TODO
-    return true;
+    return true; // TODO
+  }
+
+  componentDidUpdate(prevProps) {
+    const { open, itemIndex, currIndex } = this.props;
+    if (prevProps.open !== open && itemIndex === currIndex) {
+      this.requestInAnimation();
+    }
   }
 
   getItemDimension(zoomed) {
     const { item } = this.props;
-    if (zoomed) {
-      return {
-        width: item.width,
-        height: item.height,
-      };
-    }
     const fitRatio = this.fitRatio;
     return {
-      width: Math.round(fitRatio * item.width),
-      height: Math.round(fitRatio * item.height),
+      width: zoomed ? item.width : Math.round(fitRatio * item.width),
+      height: zoomed ? item.height : Math.round(fitRatio * item.height),
     };
   }
 
@@ -113,6 +121,70 @@ export default class ItemHolder extends Component {
     return hRatio < vRatio ? hRatio : vRatio;
   }
 
+  requestInAnimation() {
+    const { currIndex, sourceElement, showAnimateDuration } = this.props;
+    let sStyle = 0;
+    let eStyle = 1;
+    if (sourceElement !== undefined) {
+      const origItemDimension = this.getItemDimension();
+      const initCenterPos = this.getAnimWrapperCenterPos();
+      const rect = sourceElement.childNodes[currIndex].getBoundingClientRect();
+      sStyle = {
+        x: rect.left,
+        y: rect.top,
+        scale: rect.width / origItemDimension.width,
+        opacity: 0,
+      };
+      eStyle = {
+        x: initCenterPos.x,
+        y: initCenterPos.y,
+        scale: 1,
+        opacity: 1,
+      };
+    }
+    requestAnimation(
+      sStyle,
+      eStyle,
+      showAnimateDuration,
+      'easeOutCubic',
+      (pos) => {
+        if (sourceElement !== undefined) {
+          this.applyOverlayOpacity(pos.opacity);
+          this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale);
+        } else {
+          this.applyOverlayOpacity(pos);
+        }
+      },
+    );
+  }
+
+  requestOutAnimation(startStyle, endStyle, callback) {
+    const { currIndex, sourceElement, hideAnimateDuration } = this.props;
+    const sStyle = startStyle;
+    let eStyle = endStyle; // default endStyle --> swipe out of top / bottom
+    if (sourceElement !== undefined) {
+      const currItemDimension = this.getItemDimension(this.isZoom);
+      const rect = sourceElement.childNodes[currIndex].getBoundingClientRect();
+      eStyle = {
+        x: rect.left,
+        y: rect.top,
+        scale: rect.width / currItemDimension.width,
+        opacity: 0,
+      };
+    }
+    requestAnimation(
+      sStyle,
+      eStyle,
+      hideAnimateDuration,
+      'easeOutCubic',
+      (pos) => {
+        this.applyOverlayOpacity(pos.opacity);
+        this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale);
+      },
+      () => callback(),
+    );
+  }
+
 /**
  *
  * @param {Object} center - Pinch two finger center point position
@@ -144,6 +216,10 @@ export default class ItemHolder extends Component {
     };
   }
 
+  applyOverlayOpacity(opacity) {
+    this.props.overlay.style.opacity = opacity;
+  }
+
   applyAnimWrapperTransform(x, y, scale) {
     this.animWrapper.style.transform = `translate3d(${x}px, ${y}px, 0px) scale(${scale})`;
   }
@@ -154,17 +230,18 @@ export default class ItemHolder extends Component {
   }
 
   handleTap(e) {
-    // console.log(e, 'tap');
     this.props.onTap(e);
   }
 
   handleDoubleTap(e) {
-    // console.log(e, 'doubleTap');
+    // console.log('doubleTap');
     this.props.onDoubleTap(e);
   }
 
   handlePanStart(e) {
-    this.props.onPanStart(e);
+    if (this.props.onPanStart) {
+      this.props.onPanStart(e);
+    }
   }
 
   /**
@@ -175,6 +252,7 @@ export default class ItemHolder extends Component {
    */
   // TODO make it throttled by rAF
   handlePan(e) {
+    const { viewportSize } = this.props;
     const direction = e.direction;
     const delta = e.delta;
     if (this.isZoom) {
@@ -205,10 +283,13 @@ export default class ItemHolder extends Component {
       this.applyAnimWrapperTransform(currXPos, currYPos, this.currScale);
     } else {
       if (direction === 'ud') {
+        const absAccY = Math.abs(delta.accY);
+        const opacity = Math.max(1 - (absAccY / viewportSize.height), 0);
         const initCenterPos = this.getAnimWrapperCenterPos();
+        this.applyOverlayOpacity(opacity);
         this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y + delta.accY, 1);
       }
-      this.props.onPan(direction, delta, this.getItemDimension());
+      this.props.onPan(direction, delta);
     }
   }
 
@@ -243,7 +324,7 @@ export default class ItemHolder extends Component {
             currYPos = bounds.y.bottom + (offset.bottom * PAN_FRICTION_LEVEL);
           }
         }
-        startAnimation(
+        requestAnimation(
           { x: currXPos, y: currYPos },
           { x: nextXPos, y: nextYPos },
           BOUNCE_BACK_DURATION,
@@ -260,25 +341,55 @@ export default class ItemHolder extends Component {
   }
 
   handleSwipe(e) {
-    // console.log(e.direction, 'swipe');
     if (!this.isZoom) {
+      const { viewportSize, swipeToCloseThreshold } = this.props;
       const direction = e.direction;
       const delta = e.delta;
-      // We need to restore the initial postition when Swipe Up / Down
+      const absAccY = Math.abs(delta.accY);
       if ((direction === 'Up' || direction === 'Down')) {
+        const origItemDimension = this.getItemDimension();
         const initCenterPos = this.getAnimWrapperCenterPos();
-        const sPos = initCenterPos.y + delta.accY;
-        const ePos = initCenterPos.y;
-        startAnimation(sPos, ePos, BOUNCE_BACK_DURATION, 'easeOutCubic', (pos) => {
-          this.applyAnimWrapperTransform(initCenterPos.x, pos, 1);
-        });
+
+        const sStyle = {
+          x: initCenterPos.x,
+          y: initCenterPos.y + delta.accY,
+          scale: 1,
+          opacity: Math.max(1 - (absAccY / viewportSize.height), 0),
+        };
+        let eStyle;
+
+        const isExceed = absAccY > (swipeToCloseThreshold * viewportSize.height);
+        if (isExceed) {
+          const animOutCallback = () => {
+            this.props.onInnerClose();
+            this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
+          };
+          eStyle = direction === 'Up'
+          ? { x: initCenterPos.x, y: -origItemDimension.height, scale: 1, opacity: 0 }
+          : { x: initCenterPos.x, y: (initCenterPos.y * 2) + origItemDimension.height, scale: 1, opacity: 0 }; // eslint-disable-line max-len
+          this.requestOutAnimation(sStyle, eStyle, animOutCallback);
+        } else {
+          eStyle = { x: initCenterPos.x, y: initCenterPos.y, opacity: 1 };
+          requestAnimation(
+            sStyle,
+            eStyle,
+            BOUNCE_BACK_DURATION,
+            'easeOutCubic',
+            (pos) => {
+              this.applyOverlayOpacity(pos.opacity);
+              this.applyAnimWrapperTransform(pos.x, pos.y, 1);
+            },
+          );
+        }
       }
-      this.props.onSwipe(direction, delta, this.getItemDimension());
+      this.props.onSwipe(direction, delta);
     }
   }
 
   handlePinchStart(e) {
-    this.props.onPinchStart(e);
+    if (this.props.onPinchStart) {
+      this.props.onPinchStart(e);
+    }
   }
 
   // TODO make it throttled by rAF
@@ -298,21 +409,20 @@ export default class ItemHolder extends Component {
 
     if (pivotScale < (maxZoomLevel + ZOOM_LEVEL_INCRE)) {
       const currPos = this.getAnimWrapperCenterPos(origItemDimension, pivotScale);
-      const delta = this.calculatePinchDelta(e.center, pivotScale);
-
+      const delta = this.calculatePinchDelta(e.center, e.scale);
       const nextXPos = currPos.x + delta.x;
       const nextYPos = currPos.y + delta.y;
 
       this.applyAnimWrapperTransform(nextXPos, nextYPos, realScale);
       this.currScale = realScale;
       if (pivotScale < 1) {
-        this.props.onPinch(pivotScale);
+        this.applyOverlayOpacity(pivotScale);
       }
     }
   }
 
   handlePinchEnd(e) {
-    const { item, pinchToCloseThresholder, maxZoomLevel } = this.props;
+    const { item, sourceElement, pinchToCloseThresholder, maxZoomLevel } = this.props;
 
     const origItemDimension = this.getItemDimension();
     const zoomedItemDimension = this.getItemDimension(true);
@@ -325,16 +435,17 @@ export default class ItemHolder extends Component {
                        : realScale;
 
     const currPos = this.getAnimWrapperCenterPos(origItemDimension, pivotScale);
-
-    const delta = this.calculatePinchDelta(e.center, pivotScale);
+    const delta = this.calculatePinchDelta(e.center, e.scale);
     const currXPos = currPos.x + delta.x;
     const currYPos = currPos.y + delta.y;
 
     if (pivotScale < 1) {
       const initCenterPos = this.getAnimWrapperCenterPos();
       // Reset image size and animation wrapper position
-      const resetPinchStatus = () => {
-        this.props.onPinchEnd(pivotScale);
+      const resetPinchCallback = (innerClose = true) => {
+        if (innerClose) {
+          this.props.onInnerClose();
+        }
         this.applyImageSize(origItemDimension);
         this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
         this.isZoom = false;
@@ -342,17 +453,21 @@ export default class ItemHolder extends Component {
         this.scaleRatio = undefined;
         this.currPos = this.getAnimWrapperCenterPos();
       };
-      if (pivotScale < pinchToCloseThresholder) {
-        resetPinchStatus();
+      if (pivotScale < pinchToCloseThresholder && sourceElement !== undefined) {
+        const sStyle = { x: currXPos, y: currYPos, scale: realScale, opacity: pivotScale };
+        this.requestOutAnimation(sStyle, null, resetPinchCallback);
       } else {
         const initScale = this.isZoom ? origItemDimension.width / zoomedItemDimension.width : 1;
-        startAnimation(
-          { x: currXPos, y: currYPos, scale: realScale },
-          { x: initCenterPos.x, y: initCenterPos.y, scale: initScale },
+        requestAnimation(
+          { x: currXPos, y: currYPos, scale: realScale, opacity: pivotScale },
+          { x: initCenterPos.x, y: initCenterPos.y, scale: initScale, opacity: 1 },
           BOUNCE_BACK_DURATION,
           'easeOutCubic',
-          pos => this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale),
-          () => resetPinchStatus(),
+          (pos) => {
+            this.applyOverlayOpacity(pos.opacity);
+            this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale);
+          },
+          () => resetPinchCallback(false),
         );
       }
     } else {
@@ -380,7 +495,7 @@ export default class ItemHolder extends Component {
         nextYPos = centerPos.y;
       }
 
-      startAnimation(
+      requestAnimation(
         { x: currXPos, y: currYPos, scale: currScale },
         { x: nextXPos, y: nextYPos, scale: nextScale },
         BOUNCE_BACK_DURATION,
@@ -396,7 +511,6 @@ export default class ItemHolder extends Component {
             this.applyAnimWrapperTransform(nextXPos, nextYPos, nextScale);
             this.currScale = nextScale;
           }
-          this.props.onPinchEnd(pivotScale);
           this.scaleRatio = undefined;
           this.currPos.x = nextXPos;
           this.currPos.y = nextYPos;
@@ -440,37 +554,31 @@ export default class ItemHolder extends Component {
 
 ItemHolder.displayName = 'React-Photo-Swipe__ItemHolder';
 
-ItemHolder.defaultProps = {
-  onTap: () => {},
-  onDoubleTap: () => {},
-  onPanStart: () => {},
-  onPan: () => {},
-  onPanEnd: () => {},
-  onSwipe: () => {},
-  onPinchStart: () => {},
-  onPinch: () => {},
-  onPinchEnd: () => {},
-};
-
 ItemHolder.propTypes = {
-  itemIndex: PropTypes.number.isRequired,
-  indexDiff: PropTypes.number.isRequired,
+  open: PropTypes.bool.isRequired,
   item: PropTypes.object.isRequired,
+  itemIndex: PropTypes.number.isRequired,
+  currIndex: PropTypes.number.isRequired,
+  indexDiff: PropTypes.number.isRequired,
+  sourceElement: isDomElement,
   viewportSize: PropTypes.object,
+  overlay: PropTypes.object,
+
   loop: PropTypes.bool,
   spacing: PropTypes.number,
   showAnimateDuration: PropTypes.number,
   hideAnimateDuration: PropTypes.number,
+  swipeToCloseThreshold: PropTypes.number,
   pinchToCloseThresholder: PropTypes.number,
   maxZoomLevel: PropTypes.number,
 
+  onPanStart: PropTypes.func,
+  onPinchStart: PropTypes.func,
+  onPinch: PropTypes.func,
+
   onTap: PropTypes.func.isRequired,
   onDoubleTap: PropTypes.func.isRequired,
-  onPanStart: PropTypes.func.isRequired,
   onPan: PropTypes.func.isRequired,
-  onPanEnd: PropTypes.func.isRequired,
   onSwipe: PropTypes.func.isRequired,
-  onPinchStart: PropTypes.func.isRequired,
-  onPinch: PropTypes.func.isRequired,
-  onPinchEnd: PropTypes.func.isRequired,
+  onInnerClose: PropTypes.func.isRequired,
 };

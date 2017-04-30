@@ -1,11 +1,11 @@
 /* eslint-disable react/prefer-stateless-function */
 import React, { Component, PropTypes } from 'react';
-import { Router, hashHistory } from 'react-router';
+import { Router, browserHistory } from 'react-router';
 
 export default class Root extends Component {
   render() {
     return (
-      <Router history={hashHistory}>
+      <Router history={browserHistory}>
         {this.props.routes()}
       </Router>
     );

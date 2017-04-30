@@ -25,3 +25,15 @@ export const off = (target, types, listener) => {
     target.removeEventListener(typeArray[i], listener, false);
   }
 };
+
+export const isDomElement = (props, propName, componentName) => {
+  if (props[propName] === null || props[propName] === undefined) {
+    return null;
+  }
+  if (!(props[propName] instanceof Element)) {
+    return new Error(
+      `Invalid prop \`${propName}\` supplied to ${componentName}, expect \`DOM Element\`.`,
+    );
+  }
+  return null;
+};

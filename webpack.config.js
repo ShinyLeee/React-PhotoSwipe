@@ -3,7 +3,6 @@ var path = require('path');
 var webpack = require('webpack');
 
 module.exports = {
-  // entry: './example/index.js',
   entry: [
     'react-hot-loader/patch',
     // activate HMR for React
@@ -43,7 +42,8 @@ module.exports = {
     hot: true,
     contentBase: path.resolve(__dirname, 'example'),
     port: 3000,
-    publicPath: '/js'
+    publicPath: '/js',
+    host: '0.0.0.0'
   },
   plugins: [
     new webpack.HotModuleReplacementPlugin(),

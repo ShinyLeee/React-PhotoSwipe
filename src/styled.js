@@ -22,9 +22,7 @@ export const Overlay = styled.div`
   width: 100%;
   height: 100%;
   background: #000;
-  opacity: ${props => (props.open ? 1 : 0.01)};
-  will-change: opacity;
-  transition: ${props => (props.isPanning ? 'none' : 'opacity 333ms cubic-bezier(0.4, 0, 0.22, 1)')};
+  opacity: 0;
 `;
 
 export const Container = styled.div`

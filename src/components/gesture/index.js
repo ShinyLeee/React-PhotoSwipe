@@ -33,9 +33,9 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       this.initPinchLen = undefined;
       this.prevTime = null;
       this.currTime = null;
-      this.tapPos = getEmptyPoint(); // for tap event
+      this.tapPos = getEmptyPoint();
       this.startPanPos = getEmptyPoint();
-      this.lastPanPos = getEmptyPoint(); // for pan and swipe event
+      this.lastPanPos = getEmptyPoint();
       this.panAccDelta = getEmptyPoint();
       this.panDirection = undefined;
       this.pinchCenter = getEmptyPoint();
@@ -181,6 +181,8 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         evt.center = this.pinchCenter;
         this.pinchCenter = getEmptyPoint();
         this.emit('onPinchEnd', evt);
+        this.currPos.x2 = null;
+        this.currPos.y2 = null;
       } else if (this.isTap) {
         const emitTapEvent = () => {
           this.emit('onTap', evt);
@@ -189,6 +191,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         if (this.doubleTap) {
           this.emit('onDoubleTap', evt);
           clearTimeout(this.tapTimerId);
+          this.tapPos = getEmptyPoint();
           this.doubleTap = false;
         }
       } else if (this.lastPanPos.x !== null && this.lastPanPos.y !== null) {
@@ -202,7 +205,6 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       this.lastPanPos = getEmptyPoint();
       this.panAccDelta = getEmptyPoint();
       this.panDirection = undefined;
-      this.currPos = getEmptyPoint(true);
     }
 
     render() {

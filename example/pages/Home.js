@@ -18,26 +18,29 @@ export default class Home extends Component {
       startIndex: undefined,
       items: props.images,
       template: true,
+      sourceElement: undefined,
     };
     this.handleOpenGallery = this.handleOpenGallery.bind(this);
   }
 
-  handleOpenGallery(items, index, template) {
+  handleOpenGallery(items, index, template, sourceElement) {
     this.setState({
       open: true,
       startIndex: index,
       items,
       template,
+      sourceElement: this[sourceElement],
     });
   }
 
   render() {
     const { images } = this.props;
+    const bImages = images.slice(0, 2);
     return (
       <main>
-        <section className="section section__justifiedLayout">
+        <section className="section section__justified">
           <SectionHeader>Justified Gallery Example</SectionHeader>
-          <JustifiedGallery>
+          <JustifiedGallery innerRef={(node) => { this.justifiedGallery = node; }}>
             {
               images.map((image, i) => (
                 <ImageHolder
@@ -45,23 +48,31 @@ export default class Home extends Component {
                   style={{ width: `${(image.width * 200) / image.height}px`, flexGrow: `${(image.width * 200) / image.height}` }}
                 >
                   <PlaceHolder style={{ paddingBottom: `${(image.height / image.width) * 100}%` }} />
-                  <Image src={image.src} alt={`${image.id}.jpg`} onClick={() => this.handleOpenGallery(images, i, false)} />
+                  <Image
+                    src={image.src}
+                    alt={`${image.id}.jpg`}
+                    onClick={() => this.handleOpenGallery(images, i, false, 'justifiedGallery')}
+                  />
                 </ImageHolder>
               ))
             }
           </JustifiedGallery>
         </section>
-        <section>
+        <section className="section section__minimal">
           <SectionHeader>Minimal Gallery Example</SectionHeader>
-          <JustifiedGallery>
+          <JustifiedGallery innerRef={(node) => { this.minimalGallery = node; }}>
             {
-              [images[0], images[1], images[2]].map((image, i) => (
+              bImages.map((image, i) => (
                 <ImageHolder
                   key={image.id}
                   style={{ width: `${(image.width * 200) / image.height}px`, flexGrow: `${(image.width * 200) / image.height}` }}
                 >
                   <PlaceHolder style={{ paddingBottom: `${(image.height / image.width) * 100}%` }} />
-                  <Image src={image.src} alt={`${image.id}.jpg`} onClick={() => this.handleOpenGallery([images[0], images[1], images[2]], i, false)} />
+                  <Image
+                    src={image.src}
+                    alt={`${image.id}.jpg`}
+                    onClick={() => this.handleOpenGallery(bImages, i, false, 'minimalGallery')}
+                  />
                 </ImageHolder>
               ))
             }
@@ -73,6 +84,7 @@ export default class Home extends Component {
           initIndex={this.state.startIndex}
           onInnerClose={() => this.setState({ open: false })}
           template={this.state.template ? <Template /> : false}
+          sourceElement={this.state.sourceElement}
         />
       </main>
     );

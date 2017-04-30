@@ -1,11 +1,11 @@
 const easing = {
   sineOut: pos => Math.sin(pos * (Math.PI / 2)),
   sineInOut: pos => -(Math.cos(Math.PI * pos) - 1) / 2,
+  easeInCubic: pos => pos ** 3,
   easeOutCubic: pos => ((pos - 1) ** 3) + 1,
 };
 
-export default function startAnimation(start, end, duration, easingType, onUpdate, onComplete) {
-  // console.log(start, end);
+export default function rAF(start, end, duration, easingType, onUpdate, onComplete) {
   let currentTime = 0;
 
   const isMultiple = typeof start === 'object' && typeof end === 'object';
@@ -21,9 +21,10 @@ export default function startAnimation(start, end, duration, easingType, onUpdat
       if (!isMultiple) onUpdate(start + ((end - start) * t));
       else {
         onUpdate({
-          x: start.x && start.x + ((end.x - start.x) * t),
-          y: start.y && start.y + ((end.y - start.y) * t),
-          scale: start.scale && start.scale + ((end.scale - start.scale) * t),
+          x: start.x !== undefined && start.x + ((end.x - start.x) * t),
+          y: start.y !== undefined && start.y + ((end.y - start.y) * t),
+          scale: start.scale !== undefined && start.scale + ((end.scale - start.scale) * t),
+          opacity: start.opacity !== undefined && start.opacity + ((end.opacity - start.opacity) * t), // eslint-disable-line max-len
         });
       }
     } else if (onComplete === undefined) {
