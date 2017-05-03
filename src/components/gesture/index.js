@@ -95,8 +95,8 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       e.preventDefault();
       const currPos = this.currPos;
       const fingerNum = e.touches.length;
-      const pageX = e.touches[0].pageX;
-      const pageY = e.touches[0].pageY;
+      const clientX = e.touches[0].clientX;
+      const clientY = e.touches[0].clientY;
       this.currTime = now();
       if (this.tapPos.x) {
         if (this.isDoubleTap) {
@@ -105,13 +105,13 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         }
       }
       this.prevTime = now();
-      this.tapPos.x = pageX;
-      this.tapPos.y = pageY;
-      currPos.x1 = pageX;
-      currPos.y1 = pageY;
+      this.tapPos.x = clientX;
+      this.tapPos.y = clientY;
+      currPos.x1 = clientX;
+      currPos.y1 = clientY;
       if (fingerNum > 1) {
-        currPos.x2 = e.touches[1].pageX;
-        currPos.y2 = e.touches[1].pageY;
+        currPos.x2 = e.touches[1].clientX;
+        currPos.y2 = e.touches[1].clientY;
         this.initPinchLen = this.twoFingersDistance;
       }
     }
@@ -122,16 +122,16 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       e.preventDefault();
       const fingerNum = e.touches.length;
       const currPos = this.currPos;
-      currPos.x1 = e.touches[0].pageX;
-      currPos.y1 = e.touches[0].pageY;
+      currPos.x1 = e.touches[0].clientX;
+      currPos.y1 = e.touches[0].clientY;
       if (fingerNum > 1) {
         const evt = e;
-        currPos.x2 = e.touches[1].pageX;
-        currPos.y2 = e.touches[1].pageY;
+        currPos.x2 = e.touches[1].clientX;
+        currPos.y2 = e.touches[1].clientY;
         evt.scale = this.twoFingersDistance / this.initPinchLen;
         evt.center = {
-          x: Math.round((e.touches[0].clientX + e.touches[1].clientX) * 0.5),
-          y: Math.round((e.touches[0].clientY + e.touches[1].clientY) * 0.5),
+          x: Math.round((currPos.x1 + currPos.x2) * 0.5),
+          y: Math.round((currPos.y1 + currPos.y2) * 0.5),
         };
         this.pinchCenter = evt.center;
         this.emit('onPinchStart', evt);
@@ -175,6 +175,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     }
 
     handleTouchEnd(e) {
+      e.persist();
       const evt = e;
       if (this.currPos.x2 !== null && this.currPos.y2 !== null) {
         evt.scale = this.twoFingersDistance / this.initPinchLen;
@@ -184,6 +185,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         this.currPos.x2 = null;
         this.currPos.y2 = null;
       } else if (this.isTap) {
+        evt.position = { x: this.tapPos.x, y: this.tapPos.y };
         const emitTapEvent = () => {
           this.emit('onTap', evt);
         };

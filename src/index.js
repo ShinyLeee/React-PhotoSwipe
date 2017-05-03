@@ -218,7 +218,9 @@ export default class PhotoSwipe extends Component {
   }
 
   handleItemDoubleTap() {
-    console.log(this);
+    if (this.props.onDoubleTap) {
+      this.props.onDoubleTap();
+    }
   }
 
   handleItemPan(direction, panDelta) {
@@ -254,8 +256,8 @@ export default class PhotoSwipe extends Component {
     } = this.props;
     const { currIndex, vwWidth } = this.state;
     if (direction === 'Left' || direction === 'Right') {
-      const isExceed = Math.abs(delta.accX) > (swipeToThreshold * vwWidth);
-      if (isExceed) {
+      const shouldSwipeTo = Math.abs(delta.accX) > (swipeToThreshold * vwWidth);
+      if (shouldSwipeTo) {
         if (!loop || items.length < 3) {
           if (
             (direction === 'Right' && this.getItemIndex(currIndex - 1) === undefined) ||
@@ -366,8 +368,8 @@ PhotoSwipe.defaultProps = {
   // If a react element, means customize the whole ui-template
   template: true,
 
-  showAnimateDuration: 375,
-  hideAnimateDuration: 375,
+  showAnimateDuration: 333,
+  hideAnimateDuration: 333,
 
   // Spacing ratio between slides.
   // For example, 0.12 will render as a 12% of sliding viewport width.
@@ -384,10 +386,10 @@ PhotoSwipe.defaultProps = {
   // Minimum pinch scale based on percentage of original item
   // below it when pinchEnd will close gallery.
   // Set zero pinch will never close gallery.
-  pinchToCloseThresholder: 0.7,
+  pinchToCloseThreshold: 0,
 
-  // Maximum zoom level when performing zoom gesture
-  maxZoomLevel: 2,
+  // Maximum zoom level based on item dimension when performing zoom gesture
+  maxZoomLevel: 1.33,
 };
 
 PhotoSwipe.propTypes = {
@@ -413,7 +415,8 @@ PhotoSwipe.propTypes = {
   spacing: PropTypes.number,
   swipeToThreshold: PropTypes.number,
   swipeToCloseThreshold: PropTypes.number,
-  pinchToCloseThresholder: PropTypes.number,
+  pinchToCloseThreshold: PropTypes.number,
   maxZoomLevel: PropTypes.number,
   onInnerClose: PropTypes.func.isRequired,
+  onDoubleTap: PropTypes.func,
 };

@@ -1,6 +1,7 @@
 import styled from 'styled-components';
+import withGesture from '../gesture/index';
 
-export const Wrapper = styled.div`
+const Wrapper = styled.div`
   position: absolute;
   left: 0;
   right: 0;
@@ -8,6 +9,8 @@ export const Wrapper = styled.div`
   bottom: 0;
   overflow: hidden;
 `;
+
+export const EnhancedWrapper = withGesture(Wrapper);
 
 export const AnimWrapper = styled.div`
   position: absolute;
