@@ -1,3 +1,4 @@
+/* eslint-disable no-param-reassign */
 import React, { Component, PropTypes } from 'react';
 import {
   EnhancedWrapper,
@@ -15,12 +16,13 @@ export default class ItemHolder extends Component {
     super(props);
 
     this.isZoom = false;
-    this.currScale = 1;
     this.scaleRatio = undefined;
-    // Previous position for zoom gesture
-    this.currPos = this.getAnimWrapperCenterPos();
-    // Composed by panning and pinch delta
-    this.movedDelta = getEmptyPoint();
+    this.currScale = 1; // real scale that manipulate item style
+    this.currPos = this.getAnimWrapperCenterPos(); // Previous position for zoom gesture
+    this.preservedOffset = getEmptyPoint(); // Composed by panning and pinch delta
+    this.maxZoomPos = getEmptyPoint(); // Bounce back position if exceed maxZoomLevel
+    this.maxEventScale = 0;
+    this.maxPivotScale = this.covertScale(props.maxZoomScale, false);
     this.outOfXBound = false;
     this.outOfYBound = false;
 
@@ -62,13 +64,15 @@ export default class ItemHolder extends Component {
     };
   }
 
-  getItemBounds(isZoom) {
-    const { viewportSize } = this.props;
-    const itemDimension = this.getItemDimension(isZoom);
-    const currCenterPos = this.getAnimWrapperCenterPos(itemDimension, this.currScale);
+  // item bounds position
+  getItemBounds() {
+    const { viewportSize, maxZoomScale } = this.props;
+    const scale = Math.min(this.currScale, this.isZoom ? maxZoomScale : this.maxPivotScale);
+    const itemDimension = this.getItemDimension(this.isZoom);
+    const currCenterPos = this.getAnimWrapperCenterPos(scale, this.isZoom);
 
-    const realItemWidth = itemDimension.width * this.currScale;
-    const realItemHeight = itemDimension.height * this.currScale;
+    const realItemWidth = itemDimension.width * scale;
+    const realItemHeight = itemDimension.height * scale;
 
     const xMovingRange = realItemWidth > viewportSize.width
                           ? Math.round((realItemWidth - viewportSize.width) / 2)
@@ -92,7 +96,8 @@ export default class ItemHolder extends Component {
   }
 
   // The position where animationWrapper always in the center
-  getAnimWrapperCenterPos(dimension = this.getItemDimension(), scale = 1) {
+  getAnimWrapperCenterPos(scale = 1, isZoom = false) {
+    const dimension = this.getItemDimension(isZoom);
     const { viewportSize } = this.props;
     return {
       x: Math.round((viewportSize.width - (dimension.width * scale)) / 2),
@@ -123,6 +128,112 @@ export default class ItemHolder extends Component {
   applyImageSize(dimension) {
     this.image.style.width = `${dimension.width}px`;
     this.image.style.height = `${dimension.height}px`;
+  }
+
+  calculatePinchDelta(initCenter, center, scale) {
+    const { viewportSize } = this.props;
+    const screenCenter = {
+      x: Math.round(viewportSize.width * 0.5),
+      y: Math.round(viewportSize.height * 0.5),
+    };
+    const distance = {
+      x: screenCenter.x - initCenter.x,
+      y: screenCenter.y - initCenter.y,
+    };
+    const offset = {
+      x: center.x - initCenter.x,
+      y: center.y - initCenter.y,
+    };
+    const ratio = scale > 1 ? scale - 1 : 1 - scale;
+    return {
+      x: Math.round((distance.x * ratio) + offset.x),
+      y: Math.round((distance.y * ratio) + offset.y),
+    };
+  }
+
+  calculateOffset(currPos, bound) { // eslint-disable-line class-methods-use-this
+    return {
+      left: currPos.x - bound.x.left, // left < 0 means overflow left bound
+      right: currPos.x - bound.x.right, // right > 0 means overflow right bound
+      top: currPos.y - bound.y.top, // top < 0 means overflow top bound
+      bottom: currPos.y - bound.y.bottom, // bottom > 0 means overflow bottom bound
+    };
+  }
+
+  covertScale(scale, toZoomScale) {
+    const fitRatio = this.fitRatio;
+    return toZoomScale ? scale * fitRatio : scale * (1 / fitRatio);
+  }
+
+  resetZoomStatus(innerClose = true) {
+    if (innerClose) {
+      this.props.onInnerClose();
+    }
+    const initCenterPos = this.getAnimWrapperCenterPos();
+    this.applyImageSize(this.getItemDimension());
+    this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
+    this.isZoom = false;
+    this.scaleRatio = undefined;
+    this.currScale = 1;
+    this.preservedOffset = getEmptyPoint();
+    this.currPos = initCenterPos;
+  }
+
+  adjustItemPosition(currScale, nextScale, currPos, nextPos) {
+    if (nextPos === undefined) {
+      nextPos = JSON.parse(JSON.stringify(currPos));
+    }
+    const bounds = this.getItemBounds();
+    const offset = this.calculateOffset(nextPos, bounds);
+
+    const nextCenterPos = this.getAnimWrapperCenterPos(nextScale, this.isZoom);
+
+    if ((offset.left === offset.right) || (offset.left > 0 && offset.right < 0)) {
+      nextPos.x = nextCenterPos.x;
+      this.preservedOffset.x = 0;
+    } else if (offset.left > 0 && offset.right > 0) {
+      nextPos.x = bounds.x.left;
+      this.preservedOffset.x = -nextCenterPos.x;
+    } else if (offset.left < 0 && offset.right < 0) {
+      nextPos.x = bounds.x.right;
+      this.preservedOffset.x = nextCenterPos.x;
+    }
+
+    if ((offset.top === offset.bottom) || (offset.top > 0 && offset.bottom < 0)) {
+      nextPos.y = nextCenterPos.y;
+      this.preservedOffset.y = 0;
+    } else if (offset.top > 0 && offset.bottom > 0) {
+      nextPos.y = bounds.y.top;
+      this.preservedOffset.y = -nextCenterPos.y;
+    } else if (offset.top < 0 && offset.bottom < 0) {
+      nextPos.y = bounds.y.bottom;
+      this.preservedOffset.y = nextCenterPos.y;
+    }
+
+    requestAnimation(
+      { x: currPos.x, y: currPos.y, scale: currScale },
+      { x: nextPos.x, y: nextPos.y, scale: nextScale },
+      BOUNCE_BACK_DURATION,
+      'sineOut',
+      pos => this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale),
+      () => {
+        if (!this.isZoom) {
+          const zoomedScale = this.covertScale(nextScale, true);
+          const zoomedItemDimension = this.getItemDimension(true);
+          this.applyImageSize(zoomedItemDimension);
+          this.applyAnimWrapperTransform(nextPos.x, nextPos.y, zoomedScale);
+          this.currScale = zoomedScale;
+        } else {
+          this.applyAnimWrapperTransform(nextPos.x, nextPos.y, nextScale);
+          this.currScale = nextScale;
+        }
+        this.scaleRatio = undefined;
+        this.currPos.x = nextPos.x;
+        this.currPos.y = nextPos.y;
+        this.maxZoomPos = getEmptyPoint();
+        this.isZoom = true;
+      },
+    );
   }
 
   requestInAnimation() {
@@ -167,12 +278,12 @@ export default class ItemHolder extends Component {
     const start = startStyle;
     let end = endStyle; // default endStyle --> swipe out of top / bottom
     if (sourceElement !== undefined) {
-      const currItemDimension = this.getItemDimension(this.isZoom);
+      const itemDImension = this.getItemDimension(this.isZoom);
       const rect = sourceElement.childNodes[currIndex].getBoundingClientRect();
       end = {
         x: rect.left,
         y: rect.top,
-        scale: rect.width / currItemDimension.width,
+        scale: rect.width / itemDImension.width,
         opacity: 0,
       };
     }
@@ -189,52 +300,6 @@ export default class ItemHolder extends Component {
     );
   }
 
-/**
- *
- * @param {Object} center - center point position
- * @param {Number} scale  - zoom scale, always fresh when start new zoom gesture
- */
-  calculateZoomDelta(center, scale) {
-    const { viewportSize } = this.props;
-    const screenCenter = {
-      x: Math.round(viewportSize.width * 0.5),
-      y: Math.round(viewportSize.height * 0.5),
-    };
-    return {
-      x: Math.round((screenCenter.x - center.x) * (scale - 1)),
-      y: Math.round((screenCenter.y - center.y) * (scale - 1)),
-    };
-  }
-
-  /**
-   * @description check current position whether out of 4 bounds
-   * `left` or `top` > 0 means out of left bound or top bound
-   * `right` or `bottom` < 0 means out of right bound or bottom bound
-   */
-  calculateOffset(currPos, bound) { // eslint-disable-line class-methods-use-this
-    return {
-      left: currPos.x - bound.x.left,
-      right: currPos.x - bound.x.right,
-      top: currPos.y - bound.y.top,
-      bottom: currPos.y - bound.y.bottom,
-    };
-  }
-
-  resetZoomStatus(innerClose = true) {
-    if (innerClose) {
-      this.props.onInnerClose();
-    }
-    const origItemDimension = this.getItemDimension();
-    const initCenterPos = this.getAnimWrapperCenterPos();
-    this.applyImageSize(origItemDimension);
-    this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
-    this.isZoom = false;
-    this.currScale = 1;
-    this.scaleRatio = undefined;
-    this.movedDelta = getEmptyPoint();
-    this.currPos = initCenterPos;
-  }
-
   handleTap(e) {
     this.props.onTap(e);
   }
@@ -242,23 +307,21 @@ export default class ItemHolder extends Component {
   handleDoubleTap(e) {
     let start;
     let end;
-    const movedDelta = this.movedDelta;
-    const origItemDimension = this.getItemDimension();
-    const zoomedItemDimension = this.getItemDimension(true);
+    const preservedOffset = this.preservedOffset;
     const initCenterPos = this.getAnimWrapperCenterPos();
     if (!this.isZoom) {
-      const nextScale = zoomedItemDimension.width / origItemDimension.width;
-      const nextCenterPos = this.getAnimWrapperCenterPos(origItemDimension, nextScale);
-      const delta = this.calculateZoomDelta(e.position, nextScale);
-      movedDelta.x = delta.x;
-      movedDelta.y = delta.y;
+      const nextScale = this.covertScale(1, false);
+      const nextCenterPos = this.getAnimWrapperCenterPos(nextScale);
+      const delta = this.calculatePinchDelta(e.position, e.position, nextScale);
+      preservedOffset.x = delta.x;
+      preservedOffset.y = delta.y;
       start = { x: initCenterPos.x, y: initCenterPos.y, scale: this.currScale };
       end = { x: nextCenterPos.x + delta.x, y: nextCenterPos.y + delta.y, scale: nextScale };
     } else {
       const currScale = this.currScale;
-      const currCenterPos = this.getAnimWrapperCenterPos(zoomedItemDimension, currScale);
-      const initScale = origItemDimension.width / zoomedItemDimension.width;
-      start = { x: currCenterPos.x + movedDelta.x, y: currCenterPos.y + movedDelta.y, scale: currScale }; // eslint-disable-line max-len
+      const currCenterPos = this.getAnimWrapperCenterPos(currScale, true);
+      const initScale = this.covertScale(1, true);
+      start = { x: currCenterPos.x + preservedOffset.x, y: currCenterPos.y + preservedOffset.y, scale: currScale }; // eslint-disable-line max-len
       end = { x: initCenterPos.x, y: initCenterPos.y, scale: initScale };
     }
     requestAnimation(
@@ -269,6 +332,7 @@ export default class ItemHolder extends Component {
       pos => this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale),
       () => {
         if (!this.isZoom) {
+          const zoomedItemDimension = this.getItemDimension(true);
           this.applyImageSize(zoomedItemDimension);
           this.applyAnimWrapperTransform(end.x, end.y, 1);
           this.isZoom = true;
@@ -299,29 +363,27 @@ export default class ItemHolder extends Component {
       let currXPos = this.currPos.x + delta.accX;
       let currYPos = this.currPos.y + delta.accY;
 
-      const bounds = this.getItemBounds(true);
-      // If panning out of item bounds we should make it very hard to continue pan
+      const bounds = this.getItemBounds();
+      // If panning out of bounds we should make it hard to continue
       const offset = this.calculateOffset({ x: currXPos, y: currYPos }, bounds);
 
-      if (offset.left > 0 || offset.right < 0) {
+      if (offset.left > 0) { // out of left bounds
         this.outOfXBound = true;
-        if (offset.left > 0) {
-          currXPos = bounds.x.left + (offset.left * FRICTION_LEVEL);
-        } else {
-          currXPos = bounds.x.right + (offset.right * FRICTION_LEVEL);
-        }
+        currXPos = bounds.x.left + (offset.left * FRICTION_LEVEL);
+      } else if (offset.right < 0) { // out of right bounds
+        this.outOfXBound = true;
+        currXPos = bounds.x.right + (offset.right * FRICTION_LEVEL);
       }
 
-      if (offset.top > 0 || offset.bottom < 0) {
+      if (offset.top > 0) { // out of top bounds
         this.outOfYBound = true;
-        if (offset.top > 0) {
-          currYPos = bounds.y.top + (offset.top * FRICTION_LEVEL);
-        } else {
-          currYPos = bounds.y.bottom + (offset.bottom * FRICTION_LEVEL);
-        }
+        currYPos = bounds.y.top + (offset.top * FRICTION_LEVEL);
+      } else if (offset.bottom < 0) { // out of bottom bounds
+        this.outOfYBound = true;
+        currYPos = bounds.y.bottom + (offset.bottom * FRICTION_LEVEL);
       }
       this.applyAnimWrapperTransform(currXPos, currYPos, this.currScale);
-    } else {
+    } else if (this.currScale === 1) {
       if (direction === 'ud') {
         const absAccY = Math.abs(delta.accY);
         const opacity = Math.max(1 - (absAccY / viewportSize.height), 0);
@@ -342,37 +404,33 @@ export default class ItemHolder extends Component {
       let nextXPos = currXPos;
       let nextYPos = currYPos;
 
-      this.movedDelta.x += e.delta.accX;
-      this.movedDelta.y += e.delta.accY;
+      this.preservedOffset.x += e.delta.accX;
+      this.preservedOffset.y += e.delta.accY;
 
       if (this.outOfXBound || this.outOfYBound) {
-        const bounds = this.getItemBounds(true);
+        const bounds = this.getItemBounds();
         const offset = this.calculateOffset({ x: currXPos, y: currYPos }, bounds);
 
-        const zoomedItemDimension = this.getItemDimension(true);
-        const currCenterPos = this.getAnimWrapperCenterPos(zoomedItemDimension, this.currScale);
+        const currCenterPos = this.getAnimWrapperCenterPos(this.currScale, true);
 
-        if (offset.left > 0 || offset.right < 0) {
-          if (offset.left > 0) {
-            nextXPos = bounds.x.left;
-            currXPos = bounds.x.left + (offset.left * FRICTION_LEVEL);
-            this.movedDelta.x = bounds.x.left - currCenterPos.x;
-          } else {
-            nextXPos = bounds.x.right;
-            currXPos = bounds.x.right + (offset.right * FRICTION_LEVEL);
-            this.movedDelta.x = bounds.x.right - currCenterPos.x;
-          }
+        if (offset.left > 0) {
+          nextXPos = bounds.x.left;
+          currXPos = bounds.x.left + (offset.left * FRICTION_LEVEL);
+          this.preservedOffset.x = bounds.x.left - currCenterPos.x;
+        } else if (offset.right < 0) {
+          nextXPos = bounds.x.right;
+          currXPos = bounds.x.right + (offset.right * FRICTION_LEVEL);
+          this.preservedOffset.x = bounds.x.right - currCenterPos.x;
         }
-        if (offset.top > 0 || offset.bottom < 0) {
-          if (offset.top > 0) {
-            nextYPos = bounds.y.top;
-            currYPos = bounds.y.top + (offset.top * FRICTION_LEVEL);
-            this.movedDelta.y = bounds.y.top - currCenterPos.y;
-          } else {
-            nextYPos = bounds.y.bottom;
-            currYPos = bounds.y.bottom + (offset.bottom * FRICTION_LEVEL);
-            this.movedDelta.y = bounds.y.bottom - currCenterPos.y;
-          }
+
+        if (offset.top > 0) {
+          nextYPos = bounds.y.top;
+          currYPos = bounds.y.top + (offset.top * FRICTION_LEVEL);
+          this.preservedOffset.y = bounds.y.top - currCenterPos.y;
+        } else if (offset.bottom < 0) {
+          nextYPos = bounds.y.bottom;
+          currYPos = bounds.y.bottom + (offset.bottom * FRICTION_LEVEL);
+          this.preservedOffset.y = bounds.y.bottom - currCenterPos.y;
         }
         requestAnimation(
           { x: currXPos, y: currYPos },
@@ -390,8 +448,6 @@ export default class ItemHolder extends Component {
   }
 
   handleSwipe(e) {
-    // TODO bug: too fast swipe when zooming in the first time will trigger this,
-    // cuz this.isZoom is still false.
     if (!this.isZoom) {
       const { viewportSize, swipeToCloseThreshold } = this.props;
       const direction = e.direction;
@@ -445,47 +501,47 @@ export default class ItemHolder extends Component {
 
   // TODO make it throttled by rAF
   handlePinch(e) {
-    const { maxZoomLevel } = this.props;
-
     if (this.scaleRatio === undefined) {
       this.scaleRatio = this.currScale / e.scale;
     }
 
-    const origItemDimension = this.getItemDimension();
-    const zoomedItemDimension = this.getItemDimension(true);
+    const maxPivotScale = this.maxPivotScale;
 
-    const maxLevel = (maxZoomLevel * zoomedItemDimension.width) / origItemDimension.width;
-
-    // real scale that will manipulate item style
+    // real scale that manipulate item style
     const realScale = e.scale * this.scaleRatio;
-    // pivot scale that based on original item dimension
-    const pivotScale = this.isZoom
-                       ? (realScale * zoomedItemDimension.width) / origItemDimension.width
-                       : realScale;
+    // pivot scale that always based on original item dimension
+    const pivotScale = this.isZoom ? this.covertScale(realScale, false) : realScale;
 
-    if (pivotScale < maxLevel) {
+    if (pivotScale < maxPivotScale) {
       if (pivotScale < 1) {
         this.applyOverlayOpacity(pivotScale);
       }
-      const currCenterPos = this.getAnimWrapperCenterPos(origItemDimension, pivotScale);
-      const delta = this.calculateZoomDelta(e.center, e.scale);
+      const currCenterPos = this.getAnimWrapperCenterPos(pivotScale);
+      const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, e.scale);
 
-      const nextXPos = currCenterPos.x + this.movedDelta.x + delta.x;
-      const nextYPos = currCenterPos.y + this.movedDelta.y + delta.y;
+      const nextXPos = currCenterPos.x + this.preservedOffset.x + pinchDelta.x;
+      const nextYPos = currCenterPos.y + this.preservedOffset.y + pinchDelta.y;
 
       this.applyAnimWrapperTransform(nextXPos, nextYPos, realScale);
       this.currScale = realScale;
-    } else {
-      let slowScale = maxLevel + ((pivotScale - maxLevel) * FRICTION_LEVEL);
-      const currCenterPos = this.getAnimWrapperCenterPos(origItemDimension, slowScale);
-      const delta = this.calculateZoomDelta(e.center, e.scale);
+    } else if (pivotScale > maxPivotScale) {
+      if (this.maxZoomPos.x === null || this.maxZoomPos.y === null) {
+        const maxCenterPos = this.getAnimWrapperCenterPos(maxPivotScale);
+        const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, e.scale);
+        this.maxZoomPos.x = maxCenterPos.x + this.preservedOffset.x + pinchDelta.x;
+        this.maxZoomPos.y = maxCenterPos.y + this.preservedOffset.y + pinchDelta.y;
+        this.maxEventScale = e.scale;
+      }
+      let slowScale = maxPivotScale + ((pivotScale - maxPivotScale) * 0.1);
+      const currCenterPos = this.getAnimWrapperCenterPos(slowScale);
+      const slowZoomScale = this.maxEventScale + ((e.scale - this.maxEventScale) * 0.1);
+      const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, slowZoomScale);
 
-      const nextXPos = currCenterPos.x + this.movedDelta.x + delta.x;
-      const nextYPos = currCenterPos.y + this.movedDelta.y + delta.y;
+      const nextXPos = currCenterPos.x + this.preservedOffset.x + pinchDelta.x;
+      const nextYPos = currCenterPos.y + this.preservedOffset.y + pinchDelta.y;
 
-      // if zoomed we need to make slowScale based on zoomedItemDimension
       if (this.isZoom) {
-        slowScale = (slowScale * origItemDimension.width) / zoomedItemDimension.width;
+        slowScale = this.covertScale(slowScale, true);
       }
       this.applyAnimWrapperTransform(nextXPos, nextYPos, slowScale);
       this.currScale = slowScale;
@@ -493,32 +549,26 @@ export default class ItemHolder extends Component {
   }
 
   handlePinchEnd(e) {
-    const { sourceElement, pinchToCloseThreshold, maxZoomLevel } = this.props;
+    if (this.currScale === 1 && !this.isZoom) return;
+    const { sourceElement, pinchToCloseThreshold } = this.props;
 
-    const origItemDimension = this.getItemDimension();
-    const zoomedItemDimension = this.getItemDimension(true);
+    const currScale = this.currScale;
+    const pivotScale = this.isZoom ? this.covertScale(currScale, false) : currScale;
+    const maxPivotScale = this.maxPivotScale;
 
-    const maxLevel = (maxZoomLevel * zoomedItemDimension.width) / origItemDimension.width;
-
-    const realScale = this.currScale;
-    const pivotScale = this.isZoom
-                       ? (realScale * zoomedItemDimension.width) / origItemDimension.width
-                       : realScale;
-
-    const currCenterPos = this.getAnimWrapperCenterPos(origItemDimension, pivotScale);
-    const delta = this.calculateZoomDelta(e.center, e.scale);
-    const currXPos = currCenterPos.x + this.movedDelta.x + delta.x;
-    const currYPos = currCenterPos.y + this.movedDelta.y + delta.y;
-
-    if (pivotScale < 1) {
-      const initCenterPos = this.getAnimWrapperCenterPos();
+    if (pivotScale < maxPivotScale) {
+      const currCenterPos = this.getAnimWrapperCenterPos(pivotScale);
+      const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, e.scale);
+      const currXPos = currCenterPos.x + this.preservedOffset.x + pinchDelta.x;
+      const currYPos = currCenterPos.y + this.preservedOffset.y + pinchDelta.y;
       if (pivotScale < pinchToCloseThreshold && sourceElement !== undefined) {
-        const start = { x: currXPos, y: currYPos, scale: realScale, opacity: pivotScale };
+        const start = { x: currXPos, y: currYPos, scale: currScale, opacity: pivotScale };
         this.requestOutAnimation(start, null, this.resetZoomStatus);
-      } else {
-        const initScale = this.isZoom ? origItemDimension.width / zoomedItemDimension.width : 1;
+      } else if (pivotScale < 1) {
+        const initCenterPos = this.getAnimWrapperCenterPos();
+        const initScale = this.isZoom ? this.covertScale(1, true) : 1;
         requestAnimation(
-          { x: currXPos, y: currYPos, scale: realScale, opacity: pivotScale },
+          { x: currXPos, y: currYPos, scale: currScale, opacity: pivotScale },
           { x: initCenterPos.x, y: initCenterPos.y, scale: initScale, opacity: 1 },
           BOUNCE_BACK_DURATION,
           'easeOutCubic',
@@ -528,84 +578,28 @@ export default class ItemHolder extends Component {
           },
           () => this.resetZoomStatus(false),
         );
+      } else {
+        const nextScale = currScale;
+        this.preservedOffset.x += pinchDelta.x;
+        this.preservedOffset.y += pinchDelta.y;
+        this.adjustItemPosition(currScale, nextScale, { x: currXPos, y: currYPos });
       }
     } else {
-      // adjust zoomed item position
-      let nextXPos = currXPos;
-      let nextYPos = currYPos;
-      const currScale = realScale;
-      const nextScale = this.isZoom
-                        ? Math.min(realScale, (maxLevel * origItemDimension.width) / zoomedItemDimension.width) // eslint-disable-line max-len
-                        : Math.min(realScale, maxLevel);
+      const nextScale = this.isZoom ? this.props.maxZoomScale : maxPivotScale;
+      const slowScale = this.isZoom ? this.covertScale(currScale, false) : currScale;
+      const currCenterPos = this.getAnimWrapperCenterPos(slowScale);
+      const slowZoomScale = this.maxEventScale + ((e.scale - this.maxEventScale) * 0.1);
+      const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, slowZoomScale);
 
-      const bounds = this.getItemBounds(this.isZoom);
-      const offset = this.calculateOffset({ x: currXPos, y: currYPos }, bounds);
+      const currXPos = currCenterPos.x + this.preservedOffset.x + pinchDelta.x;
+      const currYPos = currCenterPos.y + this.preservedOffset.y + pinchDelta.y;
 
-      const nextCenterPos = this.isZoom
-                            ? this.getAnimWrapperCenterPos(zoomedItemDimension, nextScale)
-                            : this.getAnimWrapperCenterPos(origItemDimension, nextScale);
+      const maxCenterPos = this.getAnimWrapperCenterPos(maxPivotScale);
 
-      this.movedDelta.x = delta.x;
-      this.movedDelta.y = delta.y;
+      this.preservedOffset.x = this.maxZoomPos.x - maxCenterPos.x;
+      this.preservedOffset.y = this.maxZoomPos.y - maxCenterPos.y;
 
-      if (offset.left === offset.right) {
-        if (offset.top < 0 && offset.bottom > 0) { // overflow top & bottom bounds
-          // console.log('overflow top & bottom bounds');
-          nextXPos = nextCenterPos.x;
-        } else if (offset.top < 0 && offset.bottom < 0) { // overflow top bounds
-          // console.log('overflow top bounds');
-          nextXPos = nextCenterPos.x;
-          nextYPos = bounds.y.bottom;
-          this.movedDelta.y = nextCenterPos.y;
-        } else if (offset.top > 0 && offset.bottom > 0) { // overflow bottom bounds
-          // console.log('overflow bottom bounds');
-          nextXPos = nextCenterPos.x;
-          nextYPos = bounds.y.top;
-          this.movedDelta.y = -nextCenterPos.y;
-        }
-        this.movedDelta.x = 0;
-      }
-
-      if (offset.top === offset.bottom) {
-        if (offset.left < 0 && offset.right > 0) { // overflow left & right bounds
-          // console.log('overflow left & right bounds');
-          nextYPos = nextCenterPos.y;
-        } else if (offset.left < 0 && offset.right < 0) { // overflow left bounds
-          // console.log('overflow left bounds');
-          nextXPos = bounds.x.right;
-          nextYPos = nextCenterPos.y;
-          this.movedDelta.x = nextCenterPos.x;
-        } else if (offset.left > 0 && offset.right > 0) { // overflow right bounds
-          // console.log('overflow right bounds');
-          nextXPos = bounds.x.left;
-          nextYPos = nextCenterPos.y;
-          this.movedDelta.x = -nextCenterPos.x;
-        }
-        this.movedDelta.y = 0;
-      }
-
-      requestAnimation(
-        { x: currXPos, y: currYPos, scale: currScale },
-        { x: nextXPos, y: nextYPos, scale: nextScale },
-        BOUNCE_BACK_DURATION,
-        'sineOut',
-        pos => this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale),
-        () => {
-          if (!this.isZoom) {
-            const zoomedScale = (nextScale * origItemDimension.width) / zoomedItemDimension.width;
-            this.applyImageSize(zoomedItemDimension);
-            this.applyAnimWrapperTransform(nextXPos, nextYPos, zoomedScale);
-            this.currScale = zoomedScale;
-          } else {
-            this.applyAnimWrapperTransform(nextXPos, nextYPos, nextScale);
-            this.currScale = nextScale;
-          }
-          this.scaleRatio = undefined;
-          this.currPos.x = nextXPos;
-          this.currPos.y = nextYPos;
-          this.isZoom = true;
-        },
-      );
+      this.adjustItemPosition(currScale, nextScale, { x: currXPos, y: currYPos }, this.maxZoomPos);
     }
   }
 
@@ -659,7 +653,7 @@ ItemHolder.propTypes = {
   hideAnimateDuration: PropTypes.number,
   swipeToCloseThreshold: PropTypes.number,
   pinchToCloseThreshold: PropTypes.number,
-  maxZoomLevel: PropTypes.number,
+  maxZoomScale: PropTypes.number,
 
   onPanStart: PropTypes.func,
   onPinchStart: PropTypes.func,

@@ -84,6 +84,10 @@ export default class PhotoSwipe extends Component {
     return -Math.round(this.indexDiff * this.state.vwWidth * (1 + this.props.spacing));
   }
 
+  applyItemWrapperTransform(x, y) {
+    this.itemWrapper.style.transform = `translate3d(${x}px, ${y}px, 0px)`;
+  }
+
   initItemHolders(nextProps) {
     const { open, initIndex, items, ...other } = nextProps;
     const { vwWidth, vwHeight } = this.state;
@@ -197,10 +201,6 @@ export default class PhotoSwipe extends Component {
         vwHeight: innerHeight,
       });
     }
-  }
-
-  applyItemWrapperTransform(x, y) {
-    this.itemWrapper.style.transform = `translate3d(${x}px, ${y}px, 0px)`;
   }
 
   handleInnerClose() {
@@ -388,8 +388,8 @@ PhotoSwipe.defaultProps = {
   // Set zero pinch will never close gallery.
   pinchToCloseThreshold: 0,
 
-  // Maximum zoom level based on item dimension when performing zoom gesture
-  maxZoomLevel: 1.33,
+  // Maximum zoom scale based on item dimension when performing zoom gesture
+  maxZoomScale: 1,
 };
 
 PhotoSwipe.propTypes = {
@@ -416,7 +416,7 @@ PhotoSwipe.propTypes = {
   swipeToThreshold: PropTypes.number,
   swipeToCloseThreshold: PropTypes.number,
   pinchToCloseThreshold: PropTypes.number,
-  maxZoomLevel: PropTypes.number,
+  maxZoomScale: PropTypes.number,
   onInnerClose: PropTypes.func.isRequired,
   onDoubleTap: PropTypes.func,
 };
