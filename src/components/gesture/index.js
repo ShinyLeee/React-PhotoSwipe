@@ -27,12 +27,15 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
   class Gesture extends Component {
     constructor(props) {
       super(props);
-      this.doubleTap = false;
+      this.isTicking = false;
+      this.currTick = null;
+      this.isDoubleTap = false;
+      this.isPinching = false;
       this.tapTimerId = undefined;
-      this.swipeTimerId = undefined;
       this.initPinchLen = undefined;
       this.lastTime = null;
       this.currTime = null;
+      this.currPos = getEmptyPoint(true);
       this.tapPos = getEmptyPoint();
       this.startPanPos = getEmptyPoint();
       this.lastPanPos = getEmptyPoint();
@@ -40,7 +43,6 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       this.panDirection = undefined;
       this.initPinchCenter = getEmptyPoint();
       this.pinchCenter = getEmptyPoint();
-      this.currPos = getEmptyPoint(true);
       this.handleTouchStart = this.handleTouchStart.bind(this);
       this.handleTouchMove = this.handleTouchMove.bind(this);
       this.handleTouchCancel = this.handleTouchCancel.bind(this);
@@ -93,16 +95,15 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       if (this.props[type]) {
         this.props[type](e);
       }
-      // console.log(type);
     }
 
     handleTouchStart(e) {
       e.persist();
       e.preventDefault();
-      const evt = { originalEvent: e };
       const fingerNum = e.touches.length;
       const clientX = e.touches[0].clientX;
       const clientY = e.touches[0].clientY;
+      this.isTicking = true;
       this.currTime = now();
       this.currPos.x1 = clientX;
       this.currPos.y1 = clientY;
@@ -112,15 +113,10 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         this.currPos.y2 = e.touches[1].clientY;
         this.initPinchLen = this.getPinchLen();
         this.initPinchCenter = this.getMiddlePoint(this.currPos);
-        evt.initPinchCenter = this.initPinchCenter;
-        evt.pinchCenter = this.initPinchCenter;
-        evt.position = this.currPos;
-        evt.scale = 1;
-        this.emit('onPinchStart', evt);
       } else {
         if (this.tapPos.x !== null && this.tapPos.y !== null && this.checkIsdoubleTap()) {
           clearTimeout(this.tapTimerId);
-          this.doubleTap = true;
+          this.isDoubleTap = true;
         }
         this.lastTime = now();
         this.tapPos.x = clientX;
@@ -130,95 +126,114 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
 
     handleTouchMove(e) {
       e.persist();
-      // Avoid vertical touchmove scroll page and pinch zoom page.
       e.preventDefault();
-      const evt = { originalEvent: e };
-      const fingerNum = e.touches.length;
-      this.currPos.x1 = e.touches[0].clientX;
-      this.currPos.y1 = e.touches[0].clientY;
-      if (fingerNum > 1) {
-        this.currPos.x2 = e.touches[1].clientX;
-        this.currPos.y2 = e.touches[1].clientY;
-        this.pinchCenter = this.getMiddlePoint(this.currPos);
-        evt.initPinchCenter = this.initPinchCenter;
-        evt.pinchCenter = this.pinchCenter;
-        evt.position = this.currPos;
-        evt.scale = this.getPinchLen() / this.initPinchLen;
-        this.emit('onPinch', evt);
-      } else {
-        const lastPanPos = this.lastPanPos;
-        const panAccDelta = this.panAccDelta;
-        this.startPanPos = { x: this.tapPos.x, y: this.tapPos.y };
-        if (lastPanPos.x !== null && lastPanPos.y !== null) {
-          const { minPanDistance } = options;
-          const absPanAccDeltaX = Math.abs(panAccDelta.x);
-          const absPanAccDeltaY = Math.abs(panAccDelta.y);
-          evt.delta = {
-            x: this.currPos.x1 - lastPanPos.x,
-            y: this.currPos.y1 - lastPanPos.y,
-            accX: panAccDelta.x,
-            accY: panAccDelta.y,
-          };
-          if (this.panDirection !== undefined) {
-            evt.direction = this.panDirection;
-            this.emit('onPan', evt);
-          } else if (absPanAccDeltaX >= minPanDistance || absPanAccDeltaY >= minPanDistance) {
-            this.panDirection = absPanAccDeltaX > absPanAccDeltaY ? 'lr' : 'ud';
-            evt.direction = this.panDirection;
-            this.emit('onPanStart', evt);
+      const tick = () => {
+        const evt = { originalEvent: e };
+        const fingerNum = e.touches.length;
+        this.currPos.x1 = e.touches[0].clientX;
+        this.currPos.y1 = e.touches[0].clientY;
+        if (fingerNum > 1) {
+          if (!this.isPinching) {
+            this.isPinching = true;
+            evt.initPinchCenter = this.initPinchCenter;
+            evt.pinchCenter = this.initPinchCenter;
+            evt.position = this.currPos;
+            evt.scale = 1;
+            this.emit('onPinchStart', evt);
           }
+          this.currPos.x2 = e.touches[1].clientX;
+          this.currPos.y2 = e.touches[1].clientY;
+          this.pinchCenter = this.getMiddlePoint(this.currPos);
+          evt.initPinchCenter = this.initPinchCenter;
+          evt.pinchCenter = this.pinchCenter;
+          evt.position = this.currPos;
+          evt.scale = this.getPinchLen() / this.initPinchLen;
+          this.emit('onPinch', evt);
         } else {
-          evt.delta = { x: 0, y: 0 };
+          this.startPanPos.x = this.tapPos.x;
+          this.startPanPos.y = this.tapPos.y;
+          if (this.lastPanPos.x !== null && this.lastPanPos.y !== null) {
+            evt.delta = {
+              x: this.currPos.x1 - this.lastPanPos.x,
+              y: this.currPos.y1 - this.lastPanPos.y,
+              accX: this.panAccDelta.x,
+              accY: this.panAccDelta.y,
+            };
+            if (this.panDirection === undefined) {
+              const { minPanDistance } = options;
+              const absPanAccDeltaX = Math.abs(this.panAccDelta.x);
+              const absPanAccDeltaY = Math.abs(this.panAccDelta.y);
+              if (absPanAccDeltaX >= minPanDistance || absPanAccDeltaY >= minPanDistance) {
+                this.panDirection = absPanAccDeltaX > absPanAccDeltaY ? 'lr' : 'ud';
+                evt.direction = this.panDirection;
+                this.emit('onPanStart', evt);
+              }
+            } else {
+              evt.direction = this.panDirection;
+              this.emit('onPan', evt);
+            }
+          } else {
+            evt.delta = { x: 0, y: 0 };
+          }
+          this.lastPanPos.x = this.currPos.x1;
+          this.lastPanPos.y = this.currPos.y1;
+          this.panAccDelta.x += evt.delta.x;
+          this.panAccDelta.y += evt.delta.y;
         }
-        this.lastPanPos.x = this.currPos.x1;
-        this.lastPanPos.y = this.currPos.y1;
-        this.panAccDelta.x += evt.delta.x;
-        this.panAccDelta.y += evt.delta.y;
+      };
+      if (this.isTicking) {
+        if (this.currTick) {
+          window.cancelAnimationFrame(this.currTick);
+          this.currTick = null;
+        }
+        this.currTick = window.requestAnimationFrame(tick);
       }
     }
 
     handleTouchCancel() {
       clearTimeout(this.tapTimerId);
-      clearTimeout(this.swipeTimerId);
     }
 
     handleTouchEnd(e) {
       e.persist();
-      // console.log('touchend');
+      this.isTicking = false;
+      if (this.currTick) {
+        window.cancelAnimationFrame(this.currTick);
+        this.currTick = null;
+      }
       const evt = { originalEvent: e };
       if (this.currPos.x2 !== null && this.currPos.y2 !== null) {
-        evt.initPinchCenter = this.initPinchCenter;
-        evt.pinchCenter = this.pinchCenter;
-        evt.position = this.currPos;
-        evt.scale = this.getPinchLen() / this.initPinchLen;
-        this.emit('onPinchEnd', evt);
-        this.initPinchLen = undefined;
-        this.initPinchCenter = getEmptyPoint();
-        this.pinchCenter = getEmptyPoint();
-        // console.log('pinch end event', this.currPos.x2);
+        if (this.isPinching) {
+          evt.initPinchCenter = this.initPinchCenter;
+          evt.pinchCenter = this.pinchCenter;
+          evt.position = this.currPos;
+          evt.scale = this.getPinchLen() / this.initPinchLen;
+          this.emit('onPinchEnd', evt);
+          this.isPinching = false;
+          this.initPinchLen = undefined;
+          this.initPinchCenter = getEmptyPoint();
+          this.pinchCenter = getEmptyPoint();
+        }
       } else if (this.checkIsTap()) {
-        evt.position = { x: this.tapPos.x, y: this.tapPos.y };
-        const emitTapEvent = () => {
-          this.emit('onTap', evt);
-        };
-        // console.log('delay tap', this.currPos.x2);
+        evt.position = this.tapPos;
+        const emitTapEvent = () => this.emit('onTap', evt);
         this.tapTimerId = delay(emitTapEvent, options.maxTapInterval);
-        if (this.doubleTap) {
-          this.emit('onDoubleTap', evt);
+        if (this.isDoubleTap) {
           clearTimeout(this.tapTimerId);
+          this.emit('onDoubleTap', evt);
           this.tapPos = getEmptyPoint();
-          this.doubleTap = false;
+          this.isDoubleTap = false;
         }
       } else if (this.lastPanPos.x !== null && this.lastPanPos.y !== null) {
         evt.direction = this.getSwipeDirection();
         evt.delta = { accX: this.panAccDelta.x, accY: this.panAccDelta.y };
         this.emit('onPanEnd', evt);
         this.emit('onSwipe', evt);
+        this.startPanPos = getEmptyPoint();
+        this.lastPanPos = getEmptyPoint();
+        this.panAccDelta = getEmptyPoint();
+        this.panDirection = undefined;
       }
-      this.startPanPos = getEmptyPoint();
-      this.lastPanPos = getEmptyPoint();
-      this.panAccDelta = getEmptyPoint();
-      this.panDirection = undefined;
       this.currPos.x2 = null;
       this.currPos.y2 = null;
     }

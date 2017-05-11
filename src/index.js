@@ -1,21 +1,14 @@
 import React, { Component, PropTypes } from 'react';
 import ItemHolder from './components/itemHolder';
 import UITemplate from './components/ui-template';
-import {
-  Wrapper,
-  Overlay,
-  Container,
-} from './styled';
+import { Wrapper, Overlay, Container } from './styled';
 import { on, off, isDomElement } from './utils';
-import {
-  PAN_FRICTION_LEVEL,
-  SWIPE_TO_DURATION,
-  BOUNCE_BACK_DURATION,
-} from './utils/constant';
-import requestAnimation from './utils/animation';
+import { PAN_FRICTION_LEVEL, SWIPE_TO_DURATION, BOUNCE_BACK_DURATION } from './utils/constant';
+import animationEngine from './utils/animation';
+
+const rAF = animationEngine.rAF.bind(animationEngine);
 
 export default class PhotoSwipe extends Component {
-
   constructor(props) {
     super(props);
     this.indexDiff = 0;
@@ -55,7 +48,7 @@ export default class PhotoSwipe extends Component {
     // Reset some value when close gallery
     if (prevProps.open !== this.props.open && !this.props.open) {
       this.indexDiff = 0;
-      this.applyItemWrapperTransform(0, 0);
+      this.applyContainerTransform(0, 0);
     }
   }
 
@@ -84,8 +77,8 @@ export default class PhotoSwipe extends Component {
     return -Math.round(this.indexDiff * this.state.vwWidth * (1 + this.props.spacing));
   }
 
-  applyItemWrapperTransform(x, y) {
-    this.itemWrapper.style.transform = `translate3d(${x}px, ${y}px, 0px)`;
+  applyContainerTransform(x, y) {
+    this.container.style.transform = `translate3d(${x}px, ${y}px, 0px)`;
   }
 
   initItemHolders(nextProps) {
@@ -162,7 +155,6 @@ export default class PhotoSwipe extends Component {
 
     const replArrIndex = itemHolders.map(item => item.props.itemIndex).indexOf(replIndex);
 
-
     const newItemHolder = appdIndex === undefined
     ? <div key={indexDiff > 0 ? 'nextItemPlaceHolder' : 'prevItemPlaceHolder'} />
     : (
@@ -190,12 +182,23 @@ export default class PhotoSwipe extends Component {
     return newItemHolders;
   }
 
+  requestContainerAnimation(startXPos, endXPos, bounceBack, callback) {
+    rAF(
+      'swipe',
+      startXPos,
+      endXPos,
+      bounceBack ? BOUNCE_BACK_DURATION : SWIPE_TO_DURATION,
+      'sineOut',
+      pos => this.applyContainerTransform(pos, 0),
+      () => callback && callback(),
+    );
+  }
+
   handleViewChange() {
     const { vwWidth, vwHeight } = this.state;
     const innerWidth = window.innerWidth;
     const innerHeight = window.innerHeight;
     if (vwHeight !== innerHeight || vwWidth !== innerWidth) {
-      // console.log(`x: ${innerWidth}`, `y: ${innerHeight}`);
       this.setState({
         vwWidth: innerWidth,
         vwHeight: innerHeight,
@@ -226,21 +229,19 @@ export default class PhotoSwipe extends Component {
   handleItemPan(direction, panDelta) {
     const { items, loop } = this.props;
     const { currIndex } = this.state;
-    let xPos = this.wrapperXPos + panDelta.accX;
     if (direction === 'lr') {
-      // Restirct pan moving speed
+      let xPos = this.wrapperXPos + panDelta.accX;
       if (!loop || items.length < 3) {
         if (
           (panDelta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
           (panDelta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
-          // TODO should we use requestAnimation in here?
           xPos = this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL);
-          this.applyItemWrapperTransform(xPos, 0);
+          this.applyContainerTransform(xPos, 0);
           return;
         }
       }
-      this.applyItemWrapperTransform(xPos, 0);
+      this.applyContainerTransform(xPos, 0);
     } else if (direction === 'ud') {
       if (this.state.isTemplateOpen) {
         this.setState({ isTemplateOpen: false });
@@ -254,67 +255,49 @@ export default class PhotoSwipe extends Component {
       loop,
       swipeToThreshold,
     } = this.props;
-    const { currIndex, vwWidth } = this.state;
     if (direction === 'Left' || direction === 'Right') {
-      const shouldSwipeTo = Math.abs(delta.accX) > (swipeToThreshold * vwWidth);
-      if (shouldSwipeTo) {
+      if (Math.abs(delta.accX) > (swipeToThreshold * this.state.vwWidth)) {
         if (!loop || items.length < 3) {
           if (
-            (direction === 'Right' && this.getItemIndex(currIndex - 1) === undefined) ||
-            (direction === 'Left' && this.getItemIndex(currIndex + 1) === undefined)
+            (direction === 'Right' && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
+            (direction === 'Left' && this.getItemIndex(this.state.currIndex + 1) === undefined)
           ) {
-            requestAnimation(
-              this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL),
-              this.wrapperXPos,
-              BOUNCE_BACK_DURATION,
-              'sineOut',
-              pos => this.applyItemWrapperTransform(pos, 0),
-            );
+            const startXPos = this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL);
+            const endXPos = this.wrapperXPos;
+            this.requestContainerAnimation(startXPos, endXPos, false);
             return;
           }
         }
-
+        const startXPos = this.wrapperXPos + delta.accX;
         const isToLeft = direction === 'Left';
-        const sPos = this.wrapperXPos + delta.accX;
         if (isToLeft) this.indexDiff += 1;
         else this.indexDiff -= 1;
-        const ePos = this.wrapperXPos; // Need update this.indexDiff in advance
-        requestAnimation(
-          sPos,
-          ePos,
-          SWIPE_TO_DURATION,
-          'easeOutCubic',
-          pos => this.applyItemWrapperTransform(pos, 0),
-          () => {
-            this.setState((prevState) => {
-              const indexDiff = isToLeft ? 1 : -1;
-              const nextIndex = isToLeft
-                                ? this.getItemIndex(prevState.currIndex + 1)
-                                : this.getItemIndex(prevState.currIndex - 1);
-              const replIndex = isToLeft
-                                ? this.getItemIndex(prevState.currIndex - 1)
-                                : this.getItemIndex(prevState.currIndex + 1);
-              const appdIndex = isToLeft
-                                ? this.getItemIndex(prevState.currIndex + 2)
-                                : this.getItemIndex(prevState.currIndex - 2);
-              const nextItemHolders = items.length < 3
-                                      ? prevState.itemHolders
-                                      : this.updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex); // eslint-disable-line max-len
-              return {
-                currIndex: nextIndex,
-                itemHolders: nextItemHolders,
-              };
-            });
-          },
-        );
+        const endXPos = this.wrapperXPos; // Need update this.indexDiff in advance
+        this.requestContainerAnimation(startXPos, endXPos, true, () => {
+          this.setState((prevState) => {
+            const indexDiff = isToLeft ? 1 : -1;
+            const nextIndex = isToLeft
+                              ? this.getItemIndex(prevState.currIndex + 1)
+                              : this.getItemIndex(prevState.currIndex - 1);
+            const replIndex = isToLeft
+                              ? this.getItemIndex(prevState.currIndex - 1)
+                              : this.getItemIndex(prevState.currIndex + 1);
+            const appdIndex = isToLeft
+                              ? this.getItemIndex(prevState.currIndex + 2)
+                              : this.getItemIndex(prevState.currIndex - 2);
+            const nextItemHolders = items.length < 3
+                                    ? prevState.itemHolders
+                                    : this.updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex); // eslint-disable-line max-len
+            return {
+              currIndex: nextIndex,
+              itemHolders: nextItemHolders,
+            };
+          });
+        });
       } else {
-        requestAnimation(
-          this.wrapperXPos + delta.accX,
-          this.wrapperXPos,
-          BOUNCE_BACK_DURATION,
-          'easeOutCubic',
-          pos => this.applyItemWrapperTransform(pos, 0),
-        );
+        const startXPos = this.wrapperXPos + delta.accX;
+        const endXPos = this.wrapperXPos;
+        this.requestContainerAnimation(startXPos, endXPos, false);
       }
     }
   }
@@ -329,7 +312,7 @@ export default class PhotoSwipe extends Component {
         />
         <Container
           open={this.state.open}
-          innerRef={(node) => { this.itemWrapper = node; }}
+          innerRef={(node) => { this.container = node; }}
         >
           { initIndex !== undefined && this.state.itemHolders }
         </Container>
