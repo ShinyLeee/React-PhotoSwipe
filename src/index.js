@@ -4,9 +4,7 @@ import UITemplate from './components/ui-template';
 import { Wrapper, Overlay, Container } from './styled';
 import { on, off, isDomElement } from './utils';
 import { PAN_FRICTION_LEVEL, SWIPE_TO_DURATION, BOUNCE_BACK_DURATION } from './utils/constant';
-import animationEngine from './utils/animation';
-
-const rAF = animationEngine.rAF.bind(animationEngine);
+import { animate } from './utils/animation';
 
 export default class PhotoSwipe extends Component {
   constructor(props) {
@@ -17,15 +15,21 @@ export default class PhotoSwipe extends Component {
       currIndex: props.initIndex,
       vwWidth: window.innerWidth,
       vwHeight: window.innerHeight,
+      isTemplateOpen: false, // open template after zoom in
       itemHolders: undefined,
-      isTemplateOpen: props.template ? true : undefined,
     };
     this.handleViewChange = this.handleViewChange.bind(this);
-    this.handleInnerClose = this.handleInnerClose.bind(this);
+    this.handleItemReset = this.handleItemReset.bind(this);
     this.handleItemTap = this.handleItemTap.bind(this);
     this.handleItemDoubleTap = this.handleItemDoubleTap.bind(this);
     this.handleItemPan = this.handleItemPan.bind(this);
     this.handleItemSwipe = this.handleItemSwipe.bind(this);
+    this.handleItemPinchStart = this.handleItemPinchStart.bind(this);
+    this.handleTemplateClose = this.handleTemplateClose.bind(this);
+    this.handleBeforeItemZoomIn = this.handleBeforeItemZoomIn.bind(this);
+    this.handleAfterItemZoomIn = this.handleAfterItemZoomIn.bind(this);
+    this.handleBeforeItemZoomOut = this.handleBeforeItemZoomOut.bind(this);
+    this.handleAfterItemZoomOut = this.handleAfterItemZoomOut.bind(this);
   }
 
   componentDidMount() {
@@ -45,7 +49,7 @@ export default class PhotoSwipe extends Component {
   }
 
   componentDidUpdate(prevProps) {
-    // Reset some value when close gallery
+    // Reset when close gallery
     if (prevProps.open !== this.props.open && !this.props.open) {
       this.indexDiff = 0;
       this.applyContainerTransform(0, 0);
@@ -82,12 +86,12 @@ export default class PhotoSwipe extends Component {
   }
 
   initItemHolders(nextProps) {
-    const { open, initIndex, items, ...other } = nextProps;
+    const { open, items, initIndex, ...other } = nextProps;
     const { vwWidth, vwHeight } = this.state;
     const prevIndex = this.getItemIndex(initIndex - 1, nextProps);
     const nextIndex = this.getItemIndex(initIndex + 1, nextProps);
     return [
-      prevIndex !== undefined ? <ItemHolder
+      prevIndex !== undefined && <ItemHolder
         key={items[prevIndex].id}
         open={open}
         itemIndex={prevIndex}
@@ -100,9 +104,14 @@ export default class PhotoSwipe extends Component {
         onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onInnerClose={this.handleInnerClose}
+        onPinchStart={this.handleItemPinchStart}
+        beforeZoomIn={this.handleBeforeItemZoomIn}
+        afterZoomIn={this.handleAfterItemZoomIn}
+        beforeZoomOut={this.handleBeforeItemZoomOut}
+        afterZoomOut={this.handleAfterItemZoomOut}
+        afterReset={this.handleItemReset}
         {...other}
-      /> : <div key="React-PhotoSwipe_prevItemPlaceHolder" />,
+      />,
       <ItemHolder
         key={items[initIndex].id}
         item={items[initIndex]}
@@ -116,10 +125,15 @@ export default class PhotoSwipe extends Component {
         onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onInnerClose={this.handleInnerClose}
+        onPinchStart={this.handleItemPinchStart}
+        beforeZoomIn={this.handleBeforeItemZoomIn}
+        afterZoomIn={this.handleAfterItemZoomIn}
+        beforeZoomOut={this.handleBeforeItemZoomOut}
+        afterZoomOut={this.handleAfterItemZoomOut}
+        afterReset={this.handleItemReset}
         {...other}
       />,
-      nextIndex !== undefined ? <ItemHolder
+      nextIndex !== undefined && <ItemHolder
         key={items[nextIndex].id}
         item={items[nextIndex]}
         open={open}
@@ -132,10 +146,15 @@ export default class PhotoSwipe extends Component {
         onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onInnerClose={this.handleInnerClose}
+        onPinchStart={this.handleItemPinchStart}
+        beforeZoomIn={this.handleBeforeItemZoomIn}
+        afterZoomIn={this.handleAfterItemZoomIn}
+        beforeZoomOut={this.handleBeforeItemZoomOut}
+        afterZoomOut={this.handleAfterItemZoomOut}
+        afterReset={this.handleItemReset}
         {...other}
-      /> : <div key="React-PhotoSwipe_nextItemPlaceHolder" />,
-    ];
+      />,
+    ].filter(item => item);
   }
 
   /**
@@ -145,8 +164,6 @@ export default class PhotoSwipe extends Component {
    * @param {Number} nextIndex - The item index that swipe to
    * @param {Number} replIndex - The item index that wait to be replaced
    * @param {Number} appdIndex - The item index that wait to be appended
-   *
-   * @return {Object} newItemHolders - An updatedItemHolders react component object
    */
   updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex) {
     const { items, loop, ...other } = this.props;
@@ -155,43 +172,56 @@ export default class PhotoSwipe extends Component {
 
     const replArrIndex = itemHolders.map(item => item.props.itemIndex).indexOf(replIndex);
 
-    const newItemHolder = appdIndex === undefined
-    ? <div key={indexDiff > 0 ? 'nextItemPlaceHolder' : 'prevItemPlaceHolder'} />
-    : (
+    const newItemHolder = appdIndex !== undefined && (
       <ItemHolder
         key={items[appdIndex].id}
         item={items[appdIndex]}
         open={open}
         itemIndex={appdIndex}
         currIndex={nextIndex}
-        indexDiff={indexDiff > 0 ? this.indexDiff + 1 : this.indexDiff - 1}
+        indexDiff={this.indexDiff + indexDiff}
         viewportSize={{ width: vwWidth, height: vwHeight }}
         overlay={this.overlay}
         onTap={this.handleItemTap}
         onDoubleTap={this.handleItemDoubleTap}
         onPan={this.handleItemPan}
         onSwipe={this.handleItemSwipe}
-        onInnerClose={this.handleInnerClose}
+        onPinchStart={this.handleItemPinchStart}
+        beforeZoomIn={this.handleBeforeItemZoomIn}
+        afterZoomIn={this.handleAfterItemZoomIn}
+        beforeZoomOut={this.handleBeforeItemZoomOut}
+        afterZoomOut={this.handleAfterItemZoomOut}
+        afterReset={this.handleItemReset}
         {...other}
       />
     );
     newItemHolders.splice(replArrIndex, 1, newItemHolder);
-    // Force to update currIndex prop
+    // Force to update currIndex prop,
     // not use React.children.map cuz it will change the original key and cause remount.
     newItemHolders = newItemHolders.map(item => React.cloneElement(item, { currIndex: nextIndex }));
     return newItemHolders;
   }
 
   requestContainerAnimation(startXPos, endXPos, bounceBack, callback) {
-    rAF(
-      'swipe',
+    animate(
+      'container__Swipe',
       startXPos,
       endXPos,
       bounceBack ? BOUNCE_BACK_DURATION : SWIPE_TO_DURATION,
-      'sineOut',
+      bounceBack ? 'sineOut' : 'easeOutCubic',
       pos => this.applyContainerTransform(pos, 0),
       () => callback && callback(),
     );
+  }
+
+  toggleTemplate(open) {
+    if (open) {
+      if (this.props.template && !this.state.isTemplateOpen) {
+        this.setState({ isTemplateOpen: true });
+      }
+    } else if (this.state.isTemplateOpen) {
+      this.setState({ isTemplateOpen: false });
+    }
   }
 
   handleViewChange() {
@@ -206,21 +236,12 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  handleInnerClose() {
-    this.setState({ open: false, isTemplateOpen: true });
-    if (this.props.onInnerClose) {
-      this.props.onInnerClose();
-    }
-  }
-
   handleItemTap() {
-    const { template } = this.props;
-    if (template) {
-      this.setState(prevState => ({ isTemplateOpen: !prevState.isTemplateOpen }));
-    }
+    this.toggleTemplate(!this.state.isTemplateOpen);
   }
 
   handleItemDoubleTap() {
+    this.toggleTemplate(false);
     if (this.props.onDoubleTap) {
       this.props.onDoubleTap();
     }
@@ -230,31 +251,25 @@ export default class PhotoSwipe extends Component {
     const { items, loop } = this.props;
     const { currIndex } = this.state;
     if (direction === 'lr') {
-      let xPos = this.wrapperXPos + panDelta.accX;
       if (!loop || items.length < 3) {
         if (
           (panDelta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
           (panDelta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
-          xPos = this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL);
+          const xPos = this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL);
           this.applyContainerTransform(xPos, 0);
           return;
         }
       }
+      const xPos = this.wrapperXPos + panDelta.accX;
       this.applyContainerTransform(xPos, 0);
     } else if (direction === 'ud') {
-      if (this.state.isTemplateOpen) {
-        this.setState({ isTemplateOpen: false });
-      }
+      this.toggleTemplate(false);
     }
   }
 
   handleItemSwipe(direction, delta) {
-    const {
-      items,
-      loop,
-      swipeToThreshold,
-    } = this.props;
+    const { items, loop, swipeToThreshold } = this.props;
     if (direction === 'Left' || direction === 'Right') {
       if (Math.abs(delta.accX) > (swipeToThreshold * this.state.vwWidth)) {
         if (!loop || items.length < 3) {
@@ -264,7 +279,7 @@ export default class PhotoSwipe extends Component {
           ) {
             const startXPos = this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL);
             const endXPos = this.wrapperXPos;
-            this.requestContainerAnimation(startXPos, endXPos, false);
+            this.requestContainerAnimation(startXPos, endXPos, true);
             return;
           }
         }
@@ -273,7 +288,7 @@ export default class PhotoSwipe extends Component {
         if (isToLeft) this.indexDiff += 1;
         else this.indexDiff -= 1;
         const endXPos = this.wrapperXPos; // Need update this.indexDiff in advance
-        this.requestContainerAnimation(startXPos, endXPos, true, () => {
+        this.requestContainerAnimation(startXPos, endXPos, false, () => {
           this.setState((prevState) => {
             const indexDiff = isToLeft ? 1 : -1;
             const nextIndex = isToLeft
@@ -286,8 +301,8 @@ export default class PhotoSwipe extends Component {
                               ? this.getItemIndex(prevState.currIndex + 2)
                               : this.getItemIndex(prevState.currIndex - 2);
             const nextItemHolders = items.length < 3
-                                    ? prevState.itemHolders
-                                    : this.updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex); // eslint-disable-line max-len
+            ? prevState.itemHolders.map(item => React.cloneElement(item, { currIndex: nextIndex }))
+            : this.updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex);
             return {
               currIndex: nextIndex,
               itemHolders: nextItemHolders,
@@ -297,23 +312,50 @@ export default class PhotoSwipe extends Component {
       } else {
         const startXPos = this.wrapperXPos + delta.accX;
         const endXPos = this.wrapperXPos;
-        this.requestContainerAnimation(startXPos, endXPos, false);
+        this.requestContainerAnimation(startXPos, endXPos, true);
       }
     }
   }
 
+  handleItemPinchStart() {
+    this.toggleTemplate(false);
+  }
+
+  handleTemplateClose() {
+    this.setState(prevState => ({
+      itemHolders: prevState.itemHolders.map(item => React.cloneElement(item, { zoomOut: true })),
+    }));
+  }
+
+  handleBeforeItemZoomIn() {
+    this.props.beforeZoomIn && this.props.beforeZoomIn();
+  }
+
+  handleAfterItemZoomIn() {
+    this.toggleTemplate(true);
+    this.props.afterZoomIn && this.props.afterZoomIn();
+  }
+
+  handleBeforeItemZoomOut() {
+    this.toggleTemplate(false);
+    this.props.beforeZoomOut && this.props.beforeZoomOut();
+  }
+
+  handleAfterItemZoomOut() {
+    this.props.afterZoomOut && this.props.afterZoomOut();
+    this.props.onClose();
+  }
+
+  handleItemReset() {
+    this.toggleTemplate(true);
+  }
+
   render() {
-    const { initIndex, items, template } = this.props;
+    const { items, initIndex, template } = this.props;
     return (
       <Wrapper open={this.state.open}>
-        <Overlay
-          open={this.state.open}
-          innerRef={(node) => { this.overlay = node; }}
-        />
-        <Container
-          open={this.state.open}
-          innerRef={(node) => { this.container = node; }}
-        >
+        <Overlay innerRef={(node) => { this.overlay = node; }} />
+        <Container innerRef={(node) => { this.container = node; }}>
           { initIndex !== undefined && this.state.itemHolders }
         </Container>
         {
@@ -322,14 +364,14 @@ export default class PhotoSwipe extends Component {
             open: this.state.open && this.state.isTemplateOpen,
             currIndex: this.state.currIndex,
             items,
-            onInnerClose: this.handleInnerClose,
+            onClose: this.handleTemplateClose,
           })
           : template && (
             <UITemplate
               open={this.state.open && this.state.isTemplateOpen}
               currIndex={this.state.currIndex}
               items={items}
-              onInnerClose={this.handleInnerClose}
+              onClose={this.handleTemplateClose}
             />
           )
         }
@@ -347,8 +389,8 @@ PhotoSwipe.defaultProps = {
   loop: true,
 
   // If true, use default ui-template.
-  // If false, a minimal gallery without ui-template.
-  // If a react element, means customize the whole ui-template
+  // If false | null | undefined, a minimal gallery without ui-template.
+  // If a react element, customize the whole ui-template by your own.
   template: true,
 
   showAnimateDuration: 333,
@@ -377,7 +419,6 @@ PhotoSwipe.defaultProps = {
 
 PhotoSwipe.propTypes = {
   open: PropTypes.bool.isRequired,
-  initIndex: PropTypes.number,
   items: PropTypes.arrayOf(PropTypes.shape({
     id: PropTypes.oneOfType([
       PropTypes.number,
@@ -387,6 +428,7 @@ PhotoSwipe.propTypes = {
     width: PropTypes.number.isRequired,
     height: PropTypes.number.isRequired,
   })).isRequired,
+  initIndex: PropTypes.number,
   sourceElement: isDomElement,
   loop: PropTypes.bool,
   template: PropTypes.oneOfType([
@@ -400,6 +442,11 @@ PhotoSwipe.propTypes = {
   swipeToCloseThreshold: PropTypes.number,
   pinchToCloseThreshold: PropTypes.number,
   maxZoomScale: PropTypes.number,
-  onInnerClose: PropTypes.func.isRequired,
+
+  onClose: PropTypes.func.isRequired,
   onDoubleTap: PropTypes.func,
+  beforeZoomIn: PropTypes.func,
+  afterZoomIn: PropTypes.func,
+  beforeZoomOut: PropTypes.func,
+  afterZoomOut: PropTypes.func,
 };

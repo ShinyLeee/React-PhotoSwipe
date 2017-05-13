@@ -15,27 +15,27 @@ export default class Home extends Component {
     super(props);
     this.state = {
       open: false,
-      startIndex: undefined,
       items: props.images,
-      template: true,
+      startIndex: undefined,
+      template: <Template />,
       sourceElement: undefined,
     };
     this.handleOpenGallery = this.handleOpenGallery.bind(this);
   }
 
-  handleOpenGallery(items, index, template, sourceElement) {
+  handleOpenGallery(items, startIndex, type) {
     this.setState({
       open: true,
-      startIndex: index,
       items,
-      template,
-      sourceElement: this[sourceElement],
+      startIndex,
+      template: type === 'justifiedGallery' ? <Template /> : false,
+      sourceElement: this[type],
     });
   }
 
   render() {
     const { images } = this.props;
-    const bImages = images.slice(0, 2);
+    const imagesB = images.slice(0, 2);
     return (
       <main>
         <section className="section section__justified">
@@ -51,7 +51,7 @@ export default class Home extends Component {
                   <Image
                     src={image.src}
                     alt={`${image.id}.jpg`}
-                    onClick={() => this.handleOpenGallery(images, i, false, 'justifiedGallery')}
+                    onClick={() => this.handleOpenGallery(images, i, 'justifiedGallery')}
                   />
                 </ImageHolder>
               ))
@@ -62,7 +62,7 @@ export default class Home extends Component {
           <SectionHeader>Minimal Gallery Example</SectionHeader>
           <JustifiedGallery innerRef={(node) => { this.minimalGallery = node; }}>
             {
-              bImages.map((image, i) => (
+              imagesB.map((image, i) => (
                 <ImageHolder
                   key={image.id}
                   style={{ width: `${(image.width * 200) / image.height}px`, flexGrow: `${(image.width * 200) / image.height}` }}
@@ -71,7 +71,7 @@ export default class Home extends Component {
                   <Image
                     src={image.src}
                     alt={`${image.id}.jpg`}
-                    onClick={() => this.handleOpenGallery(bImages, i, false, 'minimalGallery')}
+                    onClick={() => this.handleOpenGallery(imagesB, i, 'minimalGallery')}
                   />
                 </ImageHolder>
               ))
@@ -82,9 +82,9 @@ export default class Home extends Component {
           open={this.state.open}
           items={this.state.items}
           initIndex={this.state.startIndex}
-          onInnerClose={() => this.setState({ open: false })}
           template={this.state.template ? <Template /> : false}
           sourceElement={this.state.sourceElement}
+          onClose={() => this.setState({ open: false })}
         />
       </main>
     );

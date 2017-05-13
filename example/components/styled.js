@@ -5,6 +5,7 @@ export const Wrapper = styled.div`
   z-index: 1550;
   opacity: ${props => (props.open ? 1 : 0.01)}
   transition: opacity 333ms cubic-bezier(0.4, 0, 0.22, 1);
+  -webkit-tap-highlight-color: transparent;
 `;
 
 export const Header = styled.div`

@@ -1,5 +1,6 @@
 import React, { Component, PropTypes } from 'react';
 import { delay, now, getEmptyPoint } from '../../utils/index';
+import { rAF, cancelAnimation, cancelAllAnimations } from '../../utils/animation';
 
 /**
  * @description React HOC that handle touch event and produce
@@ -27,8 +28,6 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
   class Gesture extends Component {
     constructor(props) {
       super(props);
-      this.isTicking = false;
-      this.currTick = null;
       this.isDoubleTap = false;
       this.isPinching = false;
       this.tapTimerId = undefined;
@@ -100,6 +99,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     handleTouchStart(e) {
       e.persist();
       e.preventDefault();
+      cancelAllAnimations();
       const fingerNum = e.touches.length;
       const clientX = e.touches[0].clientX;
       const clientY = e.touches[0].clientY;
@@ -127,7 +127,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     handleTouchMove(e) {
       e.persist();
       e.preventDefault();
-      const tick = () => {
+      const func = () => {
         const evt = { originalEvent: e };
         const fingerNum = e.touches.length;
         this.currPos.x1 = e.touches[0].clientX;
@@ -181,13 +181,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
           this.panAccDelta.y += evt.delta.y;
         }
       };
-      if (this.isTicking) {
-        if (this.currTick) {
-          window.cancelAnimationFrame(this.currTick);
-          this.currTick = null;
-        }
-        this.currTick = window.requestAnimationFrame(tick);
-      }
+      rAF('touchmove', func);
     }
 
     handleTouchCancel() {
@@ -196,12 +190,8 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
 
     handleTouchEnd(e) {
       e.persist();
-      this.isTicking = false;
-      if (this.currTick) {
-        window.cancelAnimationFrame(this.currTick);
-        this.currTick = null;
-      }
       const evt = { originalEvent: e };
+      cancelAnimation('touchmove');
       if (this.currPos.x2 !== null && this.currPos.y2 !== null) {
         if (this.isPinching) {
           evt.initPinchCenter = this.initPinchCenter;
@@ -228,7 +218,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         evt.direction = this.getSwipeDirection();
         evt.delta = { accX: this.panAccDelta.x, accY: this.panAccDelta.y };
         this.emit('onPanEnd', evt);
-        this.emit('onSwipe', evt);
+        this.emit('onSwipe', evt); // TODO swipe velocity recognizer
         this.startPanPos = getEmptyPoint();
         this.lastPanPos = getEmptyPoint();
         this.panAccDelta = getEmptyPoint();

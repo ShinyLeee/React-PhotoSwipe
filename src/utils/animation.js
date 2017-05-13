@@ -7,74 +7,82 @@ const easing = {
   easeOutCubic: pos => ((pos - 1) ** 3) + 1,
 };
 
-const animationEngine = {
+const animations = {};
 
-  animations: {},
-
-  registerAnimation(name) {
-    if (this.animations[name]) {
-      this.cancelAnimation(name);
+export const cancelAnimation = (name) => {
+  if (animations[name]) {
+    if (animations[name].rAF) {
+      window.cancelAnimationFrame(animations[name].rAF);
     }
-    if (!this.animations[name]) {
-      this.animations[name] = {};
+    if (animations[name].done) {
+      animations[name].done(); // ensure some func called when animation canceled on the way.
     }
-  },
-
-  cancelAnimation(name) {
-    if (this.animations[name]) {
-      if (this.animations[name].raf) {
-        window.cancelAnimationFrame(this.animations[name].raf);
-      }
-      delete this.animations[name];
-    }
-  },
-
-  cancelAnimationFrame() {
-    const animations = this.animtions;
-    for (const name in animations) { // eslint-disable-line no-restricted-syntax
-      if (Object.prototype.hasOwnProperty.call(animations, name)) {
-        this.cancelAnimation(name);
-      }
-    }
-  },
-
-  rAF(name, start, end, duration, easingType, onUpdate, onComplete) {
-    this.registerAnimation(name);
-
-    if (this.animations[name]) {
-      let currentTime = 0;
-
-      const isMultiple = typeof start === 'object' && typeof end === 'object';
-
-      const tick = () => {
-        currentTime += (1 / 60) * (1000 / duration);
-
-        const p = currentTime;
-        const t = easing[easingType](p);
-
-        if (p < 1) {
-          this.animations[name].rAF = window.requestAnimationFrame(tick);
-          if (!isMultiple) onUpdate(start + ((end - start) * t));
-          else {
-            onUpdate({
-              x: start.x !== undefined && start.x + ((end.x - start.x) * t),
-              y: start.y !== undefined && start.y + ((end.y - start.y) * t),
-              scale: start.scale !== undefined && start.scale + ((end.scale - start.scale) * t),
-              opacity: start.opacity !== undefined && start.opacity + ((end.opacity - start.opacity) * t), // eslint-disable-line max-len
-            });
-          }
-        } else {
-          this.cancelAnimation(name);
-          onUpdate(end);
-          if (onComplete !== undefined && typeof onComplete === 'function') {
-            onComplete();
-          }
-        }
-      };
-
-      tick();
-    }
-  },
+    delete animations[name];
+  }
 };
 
-export default animationEngine;
+export const cancelAllAnimations = () => {
+  for (const name in animations) { // eslint-disable-line no-restricted-syntax
+    if (Object.prototype.hasOwnProperty.call(animations, name)) {
+      cancelAnimation(name);
+    }
+  }
+};
+
+export const registerAnimation = (name, done) => {
+  if (animations[name]) {
+    cancelAnimation(name);
+  }
+  if (!animations[name]) {
+    animations[name] = { done };
+  }
+};
+
+export const rAF = (name, fn) => {
+  registerAnimation(name);
+
+  if (animations[name]) {
+    animations[name].rAF = window.requestAnimationFrame(fn);
+  }
+};
+
+export const animate = (name, start, end, duration, easingType, onUpdate, onComplete) => {
+  const done = () => {
+    onUpdate(end);
+    if (onComplete !== undefined && typeof onComplete === 'function') {
+      onComplete();
+    }
+  };
+
+  registerAnimation(name, done);
+
+  if (animations[name]) {
+    let currentTime = 0;
+
+    const isMultiple = typeof start === 'object' && typeof end === 'object';
+
+    const tick = () => {
+      currentTime += (1 / 60) * (1000 / duration);
+
+      const p = currentTime;
+      const t = easing[easingType](p);
+
+      if (p < 1) {
+        animations[name].rAF = window.requestAnimationFrame(tick);
+        if (!isMultiple) onUpdate(start + ((end - start) * t));
+        else {
+          onUpdate({
+            x: start.x !== undefined && start.x + ((end.x - start.x) * t),
+            y: start.y !== undefined && start.y + ((end.y - start.y) * t),
+            scale: start.scale !== undefined && start.scale + ((end.scale - start.scale) * t),
+            opacity: start.opacity !== undefined && start.opacity + ((end.opacity - start.opacity) * t), // eslint-disable-line max-len
+          });
+        }
+      } else {
+        cancelAnimation(name);
+      }
+    };
+
+    tick();
+  }
+};
