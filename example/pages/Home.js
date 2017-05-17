@@ -7,7 +7,7 @@ import {
   Image,
 } from './styled';
 import PhotoSwipe from '../../src/index';
-import Template from '../components/Template';
+// import Template from '../components/Template';
 
 export default class Home extends Component {
 
@@ -17,7 +17,7 @@ export default class Home extends Component {
       open: false,
       items: props.images,
       startIndex: undefined,
-      template: <Template />,
+      template: true,
       sourceElement: undefined,
     };
     this.handleOpenGallery = this.handleOpenGallery.bind(this);
@@ -28,7 +28,7 @@ export default class Home extends Component {
       open: true,
       items,
       startIndex,
-      template: type === 'justifiedGallery' ? <Template /> : false,
+      template: type === 'justifiedGallery' && true,
       sourceElement: this[type],
     });
   }
@@ -82,7 +82,7 @@ export default class Home extends Component {
           open={this.state.open}
           items={this.state.items}
           initIndex={this.state.startIndex}
-          template={this.state.template ? <Template /> : false}
+          template={this.state.template}
           sourceElement={this.state.sourceElement}
           onClose={() => this.setState({ open: false })}
         />
@@ -108,6 +108,8 @@ Home.defaultProps = {
       src: '../img/1.jpg',
       width: 474,
       height: 523,
+      title: 'Very Long desc',
+      desc: 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
     },
     {
       id: 2,

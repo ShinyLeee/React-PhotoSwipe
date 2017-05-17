@@ -1,5 +1,5 @@
 import React, { Component, PropTypes } from 'react';
-import { delay, now, getEmptyPoint } from '../../utils/index';
+import { delay, now, getEmptyPoint, isClickableElement } from '../../utils/index';
 import { rAF, cancelAnimation, cancelAllAnimations } from '../../utils/animation';
 
 /**
@@ -28,6 +28,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
   class Gesture extends Component {
     constructor(props) {
       super(props);
+      this.isBind = false;
       this.isDoubleTap = false;
       this.isPinching = false;
       this.tapTimerId = undefined;
@@ -46,6 +47,31 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       this.handleTouchMove = this.handleTouchMove.bind(this);
       this.handleTouchCancel = this.handleTouchCancel.bind(this);
       this.handleTouchEnd = this.handleTouchEnd.bind(this);
+    }
+
+    componentDidMount() {
+      if (this.props.isCurrent && this.props.open && !this.isBind) {
+        this.isBind = true;
+        this.bindEvents();
+      }
+    }
+
+    componentWillReceiveProps(nextProps) {
+      if (nextProps.isCurrent && nextProps.open && !this.isBind) {
+        this.isBind = true;
+        this.bindEvents();
+      }
+      if ((!nextProps.isCurrent && this.isBind) || (!nextProps.open && this.isBind)) {
+        this.isBind = false;
+        this.unbindEvents();
+      }
+    }
+
+    componentWillUnmount() {
+      if (this.isBind) {
+        this.isBind = false;
+        this.unbindEvents();
+      }
     }
 
     getSwipeDirection() {
@@ -75,6 +101,20 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       };
     }
 
+    bindEvents() {
+      window.addEventListener('touchstart', this.handleTouchStart, false);
+      window.addEventListener('touchmove', this.handleTouchMove, false);
+      window.addEventListener('touchcancel', this.handleTouchCancel, false);
+      window.addEventListener('touchend', this.handleTouchEnd, false);
+    }
+
+    unbindEvents() {
+      window.removeEventListener('touchstart', this.handleTouchStart, false);
+      window.removeEventListener('touchmove', this.handleTouchMove, false);
+      window.removeEventListener('touchcancel', this.handleTouchCancel, false);
+      window.removeEventListener('touchend', this.handleTouchEnd, false);
+    }
+
     checkIsTap() {
       const { maxTapOffset } = options;
       return Math.abs(this.currPos.x1 - this.tapPos.x) < maxTapOffset && Math.abs(this.currPos.y1 - this.tapPos.y) < maxTapOffset; // eslint-disable-line max-len
@@ -97,9 +137,10 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     }
 
     handleTouchStart(e) {
-      e.persist();
-      e.preventDefault();
       cancelAllAnimations();
+      if (!isClickableElement(e.target)) {
+        e.preventDefault();
+      }
       const fingerNum = e.touches.length;
       const clientX = e.touches[0].clientX;
       const clientY = e.touches[0].clientY;
@@ -125,7 +166,6 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     }
 
     handleTouchMove(e) {
-      e.persist();
       e.preventDefault();
       const func = () => {
         const evt = { originalEvent: e };
@@ -189,9 +229,11 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     }
 
     handleTouchEnd(e) {
-      e.persist();
-      const evt = { originalEvent: e };
       cancelAnimation('touchmove');
+      if (!isClickableElement(e.target)) {
+        e.preventDefault();
+      }
+      const evt = { originalEvent: e };
       if (this.currPos.x2 !== null && this.currPos.y2 !== null) {
         if (this.isPinching) {
           evt.initPinchCenter = this.initPinchCenter;
@@ -204,7 +246,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
           this.initPinchCenter = getEmptyPoint();
           this.pinchCenter = getEmptyPoint();
         }
-      } else if (this.checkIsTap()) {
+      } else if (this.checkIsTap() && !isClickableElement(e.target)) {
         evt.position = this.tapPos;
         const emitTapEvent = () => this.emit('onTap', evt);
         this.tapTimerId = delay(emitTapEvent, options.maxTapInterval);
@@ -230,20 +272,21 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
 
     render() {
       return (
-        <ListenedComponent
-          onTouchStart={this.handleTouchStart}
-          onTouchMove={this.handleTouchMove}
-          onTouchCancel={this.handleTouchCancel}
-          onTouchEnd={this.handleTouchEnd}
-          {...this.props}
-        />
+        <ListenedComponent {...this.props} />
       );
     }
   }
 
   Gesture.displayName = 'React-Photo-Swipe__Gesture';
 
+  Gesture.defaultProps = {
+    open: false,
+    isCurrent: false,
+  };
+
   Gesture.propTypes = {
+    open: PropTypes.bool.isRequired,
+    isCurrent: PropTypes.bool.isRequired,
     onTap: PropTypes.func,
     onDoubleTap: PropTypes.func,
     onPanStart: PropTypes.func,

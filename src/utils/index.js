@@ -12,19 +12,9 @@ export const getEmptyPoint = double => (
   : { x1: null, y1: null, x2: null, y2: null }
 );
 
-export const on = (target, types, listener) => {
-  const typeArray = types.split(' ');
-  for (let i = 0; i < types.length; i += 1) {
-    target.addEventListener(typeArray[i], listener, false);
-  }
-};
+export const getScrollY = () => window.pageYOffset || document.documentElement.scrollTop;
 
-export const off = (target, types, listener) => {
-  const typeArray = types.split(' ');
-  for (let i = 0; i < types.length; i += 1) {
-    target.removeEventListener(typeArray[i], listener, false);
-  }
-};
+export const isClickableElement = element => (element.tagName === 'A' || element.tagName === 'BUTTON');
 
 export const isDomElement = (props, propName, componentName) => {
   if (props[propName] === null || props[propName] === undefined) {

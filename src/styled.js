@@ -8,11 +8,11 @@ export const Wrapper = styled.div`
   left: 0;
   top: 0;
   box-sizing: border-box;
-  overflow: hidden;
   touch-action: none;
   z-index: 1500;
   -webkit-text-size-adjust: 100%;
   outline: none;
+  overflow: hidden;
 `;
 
 export const Overlay = styled.div`

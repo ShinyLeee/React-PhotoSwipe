@@ -9,10 +9,6 @@ import {
 
 export default class UITemplate extends Component {
 
-  shouldComponentUpdate(nextProps) {
-    return this.props.open !== nextProps.open;
-  }
-
   render() {
     const {
       open,
@@ -20,8 +16,7 @@ export default class UITemplate extends Component {
       items,
       onClose,
     } = this.props;
-    let currItem;
-    if (open) currItem = items[currIndex];
+    const currItem = items[currIndex];
     return (
       <Wrapper open={open}>
         <Header>

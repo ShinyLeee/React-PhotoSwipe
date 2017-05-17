@@ -575,10 +575,12 @@ export default class ItemHolder extends Component {
   }
 
   render() {
-    const { item } = this.props;
+    const { open, item, itemIndex, currIndex } = this.props;
     const initCenterPos = this.getAnimWrapperCenterPos();
     return (
       <EnhancedWrapper
+        open={open}
+        isCurrent={itemIndex === currIndex}
         style={{ transform: `translate3d(${this.wrapperXPos}px, 0px, 0px)` }}
         onTap={this.handleTap}
         onDoubleTap={this.handleDoubleTap}
@@ -614,9 +616,9 @@ ItemHolder.propTypes = {
   itemIndex: PropTypes.number.isRequired,
   currIndex: PropTypes.number.isRequired,
   indexDiff: PropTypes.number.isRequired,
-  sourceElement: isDomElement,
   viewportSize: PropTypes.object,
-  overlay: PropTypes.object,
+  sourceElement: isDomElement,
+  overlay: isDomElement,
   zoomOut: PropTypes.bool,
 
   loop: PropTypes.bool,

@@ -2,7 +2,8 @@ import React, { Component, PropTypes } from 'react';
 import ItemHolder from './components/itemHolder';
 import UITemplate from './components/ui-template';
 import { Wrapper, Overlay, Container } from './styled';
-import { on, off, isDomElement } from './utils';
+import { getScrollY, isDomElement } from './utils';
+import { on, off } from './utils/event';
 import { PAN_FRICTION_LEVEL, SWIPE_TO_DURATION, BOUNCE_BACK_DURATION } from './utils/constant';
 import { animate } from './utils/animation';
 
@@ -10,40 +11,45 @@ export default class PhotoSwipe extends Component {
   constructor(props) {
     super(props);
     this.indexDiff = 0;
+    this.scrollYOffset = null;
+    this.viewportSize = { width: window.innerWidth, height: window.innerHeight };
     this.state = {
       open: false,
       currIndex: props.initIndex,
-      vwWidth: window.innerWidth,
-      vwHeight: window.innerHeight,
       isTemplateOpen: false, // open template after zoom in
       itemHolders: undefined,
     };
+    this.zoomOutItemHolders = this.zoomOutItemHolders.bind(this);
     this.handleViewChange = this.handleViewChange.bind(this);
-    this.handleItemReset = this.handleItemReset.bind(this);
     this.handleItemTap = this.handleItemTap.bind(this);
     this.handleItemDoubleTap = this.handleItemDoubleTap.bind(this);
     this.handleItemPan = this.handleItemPan.bind(this);
     this.handleItemSwipe = this.handleItemSwipe.bind(this);
     this.handleItemPinchStart = this.handleItemPinchStart.bind(this);
-    this.handleTemplateClose = this.handleTemplateClose.bind(this);
     this.handleBeforeItemZoomIn = this.handleBeforeItemZoomIn.bind(this);
     this.handleAfterItemZoomIn = this.handleAfterItemZoomIn.bind(this);
+    this.handleItemReset = this.handleItemReset.bind(this);
     this.handleBeforeItemZoomOut = this.handleBeforeItemZoomOut.bind(this);
     this.handleAfterItemZoomOut = this.handleAfterItemZoomOut.bind(this);
   }
 
   componentDidMount() {
-    on(window, 'scroll resize orientationchange', this.handleViewChange);
+    on(window, 'resize orientationchange', this.handleViewChange);
   }
 
   componentWillReceiveProps(nextProps) {
-    if (nextProps.open !== this.props.open) {
+    if (this.props.open !== nextProps.open) {
+      if (nextProps.open) {
+        this.scrollYOffset = getScrollY();
+      } else {
+        this.scrollYOffset = null;
+      }
       this.setState(prevState => ({
         open: nextProps.open,
         currIndex: nextProps.open ? nextProps.initIndex : prevState.currIndex,
         itemHolders: nextProps.open
         ? this.initItemHolders(nextProps)
-        : prevState.itemHolders.map(item => React.cloneElement(item, { open: false })),
+        : this.updateItemHolders(prevState.itemHolders, { open: false }),
       }));
     }
   }
@@ -57,7 +63,7 @@ export default class PhotoSwipe extends Component {
   }
 
   componentWillUnmount() {
-    off(window, 'scroll resize orientationchange', this.handleViewChange);
+    off(window, 'resize orientationchange', this.handleViewChange);
   }
 
   getItemIndex(index, nextProps) {
@@ -78,7 +84,7 @@ export default class PhotoSwipe extends Component {
   }
 
   get wrapperXPos() {
-    return -Math.round(this.indexDiff * this.state.vwWidth * (1 + this.props.spacing));
+    return -Math.round(this.indexDiff * this.viewportSize.width * (1 + this.props.spacing));
   }
 
   applyContainerTransform(x, y) {
@@ -87,7 +93,6 @@ export default class PhotoSwipe extends Component {
 
   initItemHolders(nextProps) {
     const { open, items, initIndex, ...other } = nextProps;
-    const { vwWidth, vwHeight } = this.state;
     const prevIndex = this.getItemIndex(initIndex - 1, nextProps);
     const nextIndex = this.getItemIndex(initIndex + 1, nextProps);
     return [
@@ -98,7 +103,7 @@ export default class PhotoSwipe extends Component {
         currIndex={initIndex}
         indexDiff={-1}
         item={items[prevIndex]}
-        viewportSize={{ width: vwWidth, height: vwHeight }}
+        viewportSize={this.viewportSize}
         overlay={this.overlay}
         onTap={this.handleItemTap}
         onDoubleTap={this.handleItemDoubleTap}
@@ -119,7 +124,7 @@ export default class PhotoSwipe extends Component {
         itemIndex={initIndex}
         currIndex={initIndex}
         indexDiff={0}
-        viewportSize={{ width: vwWidth, height: vwHeight }}
+        viewportSize={this.viewportSize}
         overlay={this.overlay}
         onTap={this.handleItemTap}
         onDoubleTap={this.handleItemDoubleTap}
@@ -140,7 +145,7 @@ export default class PhotoSwipe extends Component {
         itemIndex={nextIndex}
         currIndex={initIndex}
         indexDiff={1}
-        viewportSize={{ width: vwWidth, height: vwHeight }}
+        viewportSize={this.viewportSize}
         overlay={this.overlay}
         onTap={this.handleItemTap}
         onDoubleTap={this.handleItemDoubleTap}
@@ -157,6 +162,12 @@ export default class PhotoSwipe extends Component {
     ].filter(item => item);
   }
 
+  updateItemHolders(itemHolders, props) { // eslint-disable-line class-methods-use-this
+    // Force to update itemHolders props,
+    // not use React.children.map cuz it will change the original key and cause remount.
+    return itemHolders.map(item => React.cloneElement(item, props));
+  }
+
   /**
    *
    * @param {Object} prevState - previous react state object
@@ -165,9 +176,9 @@ export default class PhotoSwipe extends Component {
    * @param {Number} replIndex - The item index that wait to be replaced
    * @param {Number} appdIndex - The item index that wait to be appended
    */
-  updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex) {
+  replaceItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex) {
     const { items, loop, ...other } = this.props;
-    const { open, vwWidth, vwHeight, itemHolders } = prevState;
+    const { open, itemHolders } = prevState;
     let newItemHolders = [...itemHolders];
 
     const replArrIndex = itemHolders.map(item => item.props.itemIndex).indexOf(replIndex);
@@ -180,7 +191,7 @@ export default class PhotoSwipe extends Component {
         itemIndex={appdIndex}
         currIndex={nextIndex}
         indexDiff={this.indexDiff + indexDiff}
-        viewportSize={{ width: vwWidth, height: vwHeight }}
+        viewportSize={this.viewportSize}
         overlay={this.overlay}
         onTap={this.handleItemTap}
         onDoubleTap={this.handleItemDoubleTap}
@@ -196,9 +207,7 @@ export default class PhotoSwipe extends Component {
       />
     );
     newItemHolders.splice(replArrIndex, 1, newItemHolder);
-    // Force to update currIndex prop,
-    // not use React.children.map cuz it will change the original key and cause remount.
-    newItemHolders = newItemHolders.map(item => React.cloneElement(item, { currIndex: nextIndex }));
+    newItemHolders = this.updateItemHolders(newItemHolders, { currIndex: nextIndex });
     return newItemHolders;
   }
 
@@ -224,20 +233,34 @@ export default class PhotoSwipe extends Component {
     }
   }
 
+  zoomOutItemHolders() {
+    this.setState(prevState => ({
+      itemHolders: this.updateItemHolders(prevState.itemHolders, { zoomOut: true }),
+    }));
+  }
+
+
   handleViewChange() {
-    const { vwWidth, vwHeight } = this.state;
     const innerWidth = window.innerWidth;
     const innerHeight = window.innerHeight;
-    if (vwHeight !== innerHeight || vwWidth !== innerWidth) {
-      this.setState({
-        vwWidth: innerWidth,
-        vwHeight: innerHeight,
-      });
+    if (this.viewportSize.height !== innerHeight || this.viewportSize.width !== innerWidth) {
+      this.viewportSize.width = innerWidth;
+      this.viewportSize.height = innerHeight;
+      if (this.state.open) {
+        this.setState(prevState => ({
+          itemHolders: this.updateItemHolders(prevState.itemHolders, this.viewportSize),
+        }));
+      }
     }
   }
 
   handleItemTap() {
-    this.toggleTemplate(!this.state.isTemplateOpen);
+    if (this.props.template) {
+      this.toggleTemplate(!this.state.isTemplateOpen);
+    } else {
+      // close gallery if it is a minimal gallery
+      this.zoomOutItemHolders();
+    }
   }
 
   handleItemDoubleTap() {
@@ -256,7 +279,7 @@ export default class PhotoSwipe extends Component {
           (panDelta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
           (panDelta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
-          const xPos = this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL);
+          const xPos = Math.round(this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL));
           this.applyContainerTransform(xPos, 0);
           return;
         }
@@ -271,18 +294,18 @@ export default class PhotoSwipe extends Component {
   handleItemSwipe(direction, delta) {
     const { items, loop, swipeToThreshold } = this.props;
     if (direction === 'Left' || direction === 'Right') {
-      if (Math.abs(delta.accX) > (swipeToThreshold * this.state.vwWidth)) {
-        if (!loop || items.length < 3) {
-          if (
-            (direction === 'Right' && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
-            (direction === 'Left' && this.getItemIndex(this.state.currIndex + 1) === undefined)
-          ) {
-            const startXPos = this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL);
-            const endXPos = this.wrapperXPos;
-            this.requestContainerAnimation(startXPos, endXPos, true);
-            return;
-          }
+      if (!loop || items.length < 3) {
+        if (
+          (direction === 'Right' && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
+          (direction === 'Left' && this.getItemIndex(this.state.currIndex + 1) === undefined)
+        ) {
+          const startXPos = Math.round(this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL));
+          const endXPos = this.wrapperXPos;
+          this.requestContainerAnimation(startXPos, endXPos, true);
+          return;
         }
+      }
+      if (Math.abs(delta.accX) > (swipeToThreshold * this.viewportSize.width)) {
         const startXPos = this.wrapperXPos + delta.accX;
         const isToLeft = direction === 'Left';
         if (isToLeft) this.indexDiff += 1;
@@ -301,8 +324,8 @@ export default class PhotoSwipe extends Component {
                               ? this.getItemIndex(prevState.currIndex + 2)
                               : this.getItemIndex(prevState.currIndex - 2);
             const nextItemHolders = items.length < 3
-            ? prevState.itemHolders.map(item => React.cloneElement(item, { currIndex: nextIndex }))
-            : this.updateItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex);
+            ? this.updateItemHolders(prevState.itemHolders, { currIndex: nextIndex })
+            : this.replaceItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex);
             return {
               currIndex: nextIndex,
               itemHolders: nextItemHolders,
@@ -321,12 +344,6 @@ export default class PhotoSwipe extends Component {
     this.toggleTemplate(false);
   }
 
-  handleTemplateClose() {
-    this.setState(prevState => ({
-      itemHolders: prevState.itemHolders.map(item => React.cloneElement(item, { zoomOut: true })),
-    }));
-  }
-
   handleBeforeItemZoomIn() {
     this.props.beforeZoomIn && this.props.beforeZoomIn();
   }
@@ -336,18 +353,23 @@ export default class PhotoSwipe extends Component {
     this.props.afterZoomIn && this.props.afterZoomIn();
   }
 
+  handleItemReset() {
+    this.toggleTemplate(true);
+  }
+
   handleBeforeItemZoomOut() {
     this.toggleTemplate(false);
     this.props.beforeZoomOut && this.props.beforeZoomOut();
   }
 
   handleAfterItemZoomOut() {
+    // there are some situation that mobile trigger `scroll` event and it cannot be canceled,
+    // for example, mobile safari will trigger `scroll` event when swipe over the bottom.
+    if (this.scrollYOffset) {
+      window.scrollTo(0, this.scrollYOffset);
+    }
     this.props.afterZoomOut && this.props.afterZoomOut();
     this.props.onClose();
-  }
-
-  handleItemReset() {
-    this.toggleTemplate(true);
   }
 
   render() {
@@ -364,14 +386,14 @@ export default class PhotoSwipe extends Component {
             open: this.state.open && this.state.isTemplateOpen,
             currIndex: this.state.currIndex,
             items,
-            onClose: this.handleTemplateClose,
+            onClose: this.zoomOutItemHolders,
           })
           : template && (
             <UITemplate
               open={this.state.open && this.state.isTemplateOpen}
               currIndex={this.state.currIndex}
               items={items}
-              onClose={this.handleTemplateClose}
+              onClose={this.zoomOutItemHolders}
             />
           )
         }
@@ -385,7 +407,9 @@ PhotoSwipe.displayName = 'React-Photo-Swipe';
 PhotoSwipe.defaultProps = {
   open: false,
 
-  // If true image will be able to click or swipe from last to first.
+  initIndex: 0,
+
+  // If true image will be able to swipe from last to first.
   loop: true,
 
   // If true, use default ui-template.
@@ -428,7 +452,7 @@ PhotoSwipe.propTypes = {
     width: PropTypes.number.isRequired,
     height: PropTypes.number.isRequired,
   })).isRequired,
-  initIndex: PropTypes.number,
+  initIndex: PropTypes.number.isRequired,
   sourceElement: isDomElement,
   loop: PropTypes.bool,
   template: PropTypes.oneOfType([
