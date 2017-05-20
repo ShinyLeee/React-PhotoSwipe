@@ -23,18 +23,25 @@ export const AnimWrapper = styled.div`
   touch-action: none;
 `;
 
-export const PlaceHolder = styled.img`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: auto;
-`;
-
 export const Image = styled.img`
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: auto;
+  user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+`;
+
+export const PlaceHolder = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  background-color: #333;
+  user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 `;

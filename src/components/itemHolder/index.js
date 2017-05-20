@@ -7,7 +7,10 @@ import { animate } from '../../utils/animation';
 export default class ItemHolder extends Component {
   constructor(props) {
     super(props);
-
+    this.state = {
+      loaded: false,
+      loadError: false,
+    };
     this.isZoom = false;
     this.scaleRatio = undefined;
     this.currScale = 1; // real scale that manipulate item style
@@ -17,7 +20,6 @@ export default class ItemHolder extends Component {
     this.maxZoomPos = getEmptyPoint(); // Bounce back position if exceed maxZoomScale
     this.maxEventScale = 0;
     this.maxPivotScale = this.covertScale(props.maxZoomScale, false);
-
     this.handleTap = this.handleTap.bind(this);
     this.handleDoubleTap = this.handleDoubleTap.bind(this);
     this.handlePanStart = this.handlePanStart.bind(this);
@@ -30,17 +32,15 @@ export default class ItemHolder extends Component {
   }
 
   componentDidMount() {
-    const { itemIndex, currIndex } = this.props;
-    if (itemIndex === currIndex) {
+    if (this.isCurrentSlide) {
       this.props.beforeZoomIn && this.props.beforeZoomIn(true); // initial zoom in
       this.requestInAnimation(() => this.props.afterZoomIn && this.props.afterZoomIn(true));
     }
   }
 
   componentWillReceiveProps(nextProps) {
-    const { zoomOut, itemIndex, currIndex } = nextProps;
-    if (this.props.zoomOut !== zoomOut) {
-      if (zoomOut && itemIndex === currIndex) {
+    if (this.props.zoomOut !== nextProps.zoomOut) {
+      if (nextProps.zoomOut && this.isCurrentSlide) {
         this.props.beforeZoomOut && this.props.beforeZoomOut();
         const initCenterPos = this.getAnimWrapperCenterPos();
         const start = { x: initCenterPos.x, y: initCenterPos.y, scale: 1, opacity: 1 };
@@ -54,9 +54,8 @@ export default class ItemHolder extends Component {
   }
 
   componentDidUpdate(prevProps) {
-    const { open, itemIndex, currIndex } = this.props;
-    if (prevProps.open !== open) {
-      if (open && itemIndex === currIndex) {
+    if (prevProps.open !== this.props.open) {
+      if (this.props.open && this.isCurrentSlide) {
         this.props.beforeZoomIn && this.props.beforeZoomIn(false);
         this.requestInAnimation(() => this.props.afterZoomIn && this.props.afterZoomIn(false));
       }
@@ -95,7 +94,6 @@ export default class ItemHolder extends Component {
       top: currCenterPos.y + yMovingRange,
       bottom: currCenterPos.y - yMovingRange,
     };
-
     return {
       x: xBounds,
       y: yBounds,
@@ -110,6 +108,10 @@ export default class ItemHolder extends Component {
       x: Math.round((viewportSize.width - (dimension.width * scale)) / 2),
       y: Math.round((viewportSize.height - (dimension.height * scale)) / 2),
     };
+  }
+
+  get isCurrentSlide() {
+    return this.props.itemIndex === this.props.currIndex;
   }
 
   get wrapperXPos() {
@@ -133,8 +135,10 @@ export default class ItemHolder extends Component {
   }
 
   applyImageSize(dimension) {
-    this.image.style.width = `${dimension.width}px`;
-    this.image.style.height = `${dimension.height}px`;
+    if (this.image) {
+      this.image.style.width = `${dimension.width}px`;
+      this.image.style.height = `${dimension.height}px`;
+    }
   }
 
   calculateOffset(currPos, bound) { // eslint-disable-line class-methods-use-this
@@ -182,20 +186,20 @@ export default class ItemHolder extends Component {
 
   resetZoomStatus(isZoomOut) {
     const initCenterPos = this.getAnimWrapperCenterPos();
-    this.applyImageSize(this.getItemDimension());
-    this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
     this.isZoom = false;
     this.scaleRatio = undefined;
     this.currScale = 1;
     this.preservedOffset = getEmptyPoint();
     this.currPos = initCenterPos;
+    this.applyImageSize(this.getItemDimension());
+    this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
     if (isZoomOut) {
       this.props.afterZoomOut && this.props.afterZoomOut();
     }
   }
 
   requestInAnimation(callback) {
-    const { currIndex, sourceElement, showAnimateDuration } = this.props;
+    const { currIndex, sourceElement, showHideDuration } = this.props;
     let start = 0;
     let end = 1;
     if (sourceElement !== undefined) {
@@ -219,7 +223,7 @@ export default class ItemHolder extends Component {
       'itemHolder__In',
       start,
       end,
-      showAnimateDuration,
+      showHideDuration,
       'easeOutCubic',
       (pos) => {
         if (sourceElement !== undefined) {
@@ -347,7 +351,7 @@ export default class ItemHolder extends Component {
   }
 
   requestOutAnimation(start, end, callback) {
-    const { currIndex, sourceElement, hideAnimateDuration } = this.props;
+    const { currIndex, sourceElement, showHideDuration } = this.props;
     if (!end && sourceElement !== undefined) {
       const itemDimension = this.getItemDimension(this.isZoom);
       const thumbRect = sourceElement.childNodes[currIndex].getBoundingClientRect();
@@ -362,7 +366,7 @@ export default class ItemHolder extends Component {
       'itemHolder__Out',
       start,
       end,
-      hideAnimateDuration,
+      showHideDuration,
       'easeOutCubic',
       (pos) => {
         this.applyOverlayOpacity(pos.opacity);
@@ -377,6 +381,7 @@ export default class ItemHolder extends Component {
   }
 
   handleDoubleTap(e) {
+    if (!this.state.loaded || this.state.loadError) return;
     if (!this.isZoom) {
       const maxPivotScale = this.maxPivotScale;
       const initCenterPos = this.getAnimWrapperCenterPos();
@@ -398,9 +403,7 @@ export default class ItemHolder extends Component {
   }
 
   handlePanStart(e) {
-    if (this.props.onPanStart) {
-      this.props.onPanStart(e);
-    }
+    this.props.onPanStart && this.props.onPanStart(e);
   }
 
   handlePan(e) {
@@ -478,9 +481,11 @@ export default class ItemHolder extends Component {
           opacity: Math.max(1 - (absVertDelta / viewportSize.height), 0),
         };
         if (absVertDelta > (swipeToCloseThreshold * viewportSize.height)) {
+          // Swipe out if sourceElement not defined.
+          const origDimension = this.getItemDimension();
           const end = sourceElement === undefined ? {
             x: initCenterPos.x,
-            y: direction === 'Up' ? -this.getItemDimension().height : initCenterPos.y * 2,
+            y: direction === 'Up' ? -origDimension.height : (initCenterPos.y * 2) + origDimension.height,
             scale: 1,
             opacity: 0,
           } : null;
@@ -495,12 +500,12 @@ export default class ItemHolder extends Component {
   }
 
   handlePinchStart(e) {
-    if (this.props.onPinchStart) {
-      this.props.onPinchStart(e);
-    }
+    this.props.onPinchStart && this.props.onPinchStart(e);
   }
 
   handlePinch(e) {
+    if (!this.state.loaded || this.state.loadError) return;
+
     if (this.scaleRatio === undefined) {
       this.scaleRatio = this.currScale / e.scale;
     }
@@ -537,6 +542,8 @@ export default class ItemHolder extends Component {
   }
 
   handlePinchEnd(e) {
+    if (!this.state.loaded || this.state.loadError) return;
+
     const { sourceElement, pinchToCloseThreshold } = this.props;
 
     const currScale = this.currScale;
@@ -574,13 +581,18 @@ export default class ItemHolder extends Component {
     }
   }
 
+  handleImageLoad(error) {
+    this.setState({ loaded: true, loadError: error });
+    this.props.onItemLoad && this.props.onItemLoad(error, this.props.itemIndex);
+  }
+
   render() {
-    const { open, item, itemIndex, currIndex } = this.props;
+    const { open, item, errorBox } = this.props;
+    const origDimension = this.getItemDimension();
     const initCenterPos = this.getAnimWrapperCenterPos();
     return (
       <EnhancedWrapper
-        open={open}
-        isCurrent={itemIndex === currIndex}
+        shouldBind={open && this.isCurrentSlide}
         style={{ transform: `translate3d(${this.wrapperXPos}px, 0px, 0px)` }}
         onTap={this.handleTap}
         onDoubleTap={this.handleDoubleTap}
@@ -596,12 +608,22 @@ export default class ItemHolder extends Component {
           style={{ transform: `translate3d(${initCenterPos.x}px, ${initCenterPos.y}px, 0px)` }}
           innerRef={(node) => { this.animWrapper = node; }}
         >
-          { item.msrc && <PlaceHolder src={item.msrc} role="presentation" /> }
-          <Image
-            src={item.src}
-            style={this.getItemDimension()}
-            innerRef={(node) => { this.image = node; }}
-          />
+          {
+            item.msrc
+            ? <Image src={item.msrc} style={origDimension} />
+            : <PlaceHolder style={origDimension} />
+          }
+          {
+            this.state.loadError
+            ? <PlaceHolder style={origDimension}>{React.cloneElement(errorBox, { item })}</PlaceHolder> // eslint-disable-line max-len
+            : <Image
+              src={item.src}
+              style={origDimension}
+              innerRef={(node) => { this.image = node; }}
+              onLoad={() => this.handleImageLoad(false)}
+              onError={() => this.handleImageLoad(true)}
+            />
+          }
         </AnimWrapper>
       </EnhancedWrapper>
     );
@@ -619,12 +641,11 @@ ItemHolder.propTypes = {
   viewportSize: PropTypes.object,
   sourceElement: isDomElement,
   overlay: isDomElement,
-  zoomOut: PropTypes.bool,
-
   loop: PropTypes.bool,
+  errorBox: PropTypes.element,
+  zoomOut: PropTypes.bool,
   spacing: PropTypes.number,
-  showAnimateDuration: PropTypes.number,
-  hideAnimateDuration: PropTypes.number,
+  showHideDuration: PropTypes.number,
   swipeToCloseThreshold: PropTypes.number,
   pinchToCloseThreshold: PropTypes.number,
   maxZoomScale: PropTypes.number,
@@ -636,10 +657,10 @@ ItemHolder.propTypes = {
   onDoubleTap: PropTypes.func.isRequired,
   onPan: PropTypes.func.isRequired,
   onSwipe: PropTypes.func.isRequired,
-
   beforeZoomIn: PropTypes.func,
   afterZoomIn: PropTypes.func,
+  onItemLoad: PropTypes.func,
+  afterReset: PropTypes.func,
   beforeZoomOut: PropTypes.func,
   afterZoomOut: PropTypes.func,
-  afterReset: PropTypes.func,
 };

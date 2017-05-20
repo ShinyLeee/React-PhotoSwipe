@@ -2,11 +2,10 @@ import styled from 'styled-components';
 
 export const Wrapper = styled.div`
   visibility: visible;
-  z-index: 1550;
   opacity: ${props => (props.open ? 1 : 0.01)};
   transition: opacity 333ms cubic-bezier(0.4, 0, 0.22, 1);
   -webkit-tap-highlight-color: transparent;
-  -webkit-overflow-scrolling: none;
+  z-index: 1550;
 `;
 
 export const Header = styled.div`
@@ -38,11 +37,17 @@ export const ButtonGroup = styled.div`
   cursor: pointer;
 `;
 
-export const Button = styled.a`
+export const Button = styled.button`
   display: inline-block;
   width: 44px;
   height: 44px;
-  background: ${props => `url(${props.url}) no-repeat 50% 50%`}
+  margin: 0;
+  padding: 0;
+  background: ${props => `url(${props.url}) no-repeat 50% 50%`};
+  box-shadow: none;
+  border: none;
+  opacity: 0.8;
+  outline: none;
 `;
 
 export const Footer = styled.div`

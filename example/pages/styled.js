@@ -6,7 +6,7 @@ export const SectionHeader = styled.h3`
   text-align: center;
 `;
 
-export const JustifiedGallery = styled.div`
+export const JustifiedLayout = styled.div`
   display: flex;
   flex-wrap: wrap;
   margin: 2px;
@@ -17,13 +17,17 @@ export const JustifiedGallery = styled.div`
 `;
 
 export const ImageHolder = styled.div`
+  position: relative;
+  width: ${props => `${(props.width * props.rowHeight) / props.height}px`};
+  flex-grow: ${props => (props.width * props.rowHeight) / props.height};
   margin: 2px;
   background-color: #fff;
-  position: relative;
+  overflow: hidden;
 `;
 
 export const PlaceHolder = styled.i`
   display: block;
+  padding-bottom: ${props => `${(props.height / props.width) * 100}%`}
 `;
 
 export const Image = styled.img`

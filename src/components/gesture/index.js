@@ -28,7 +28,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
   class Gesture extends Component {
     constructor(props) {
       super(props);
-      this.isBind = false;
+      this.isBound = false;
       this.isDoubleTap = false;
       this.isPinching = false;
       this.tapTimerId = undefined;
@@ -50,26 +50,26 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     }
 
     componentDidMount() {
-      if (this.props.isCurrent && this.props.open && !this.isBind) {
-        this.isBind = true;
+      if (this.props.shouldBind && !this.isBound) {
+        this.isBound = true;
         this.bindEvents();
       }
     }
 
     componentWillReceiveProps(nextProps) {
-      if (nextProps.isCurrent && nextProps.open && !this.isBind) {
-        this.isBind = true;
+      if (nextProps.shouldBind && !this.isBound) {
+        this.isBound = true;
         this.bindEvents();
       }
-      if ((!nextProps.isCurrent && this.isBind) || (!nextProps.open && this.isBind)) {
-        this.isBind = false;
+      if (!nextProps.shouldBind && this.isBound) {
+        this.isBound = false;
         this.unbindEvents();
       }
     }
 
     componentWillUnmount() {
-      if (this.isBind) {
-        this.isBind = false;
+      if (this.isBound) {
+        this.isBound = false;
         this.unbindEvents();
       }
     }
@@ -280,13 +280,11 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
   Gesture.displayName = 'React-Photo-Swipe__Gesture';
 
   Gesture.defaultProps = {
-    open: false,
-    isCurrent: false,
+    shouldBind: false,
   };
 
   Gesture.propTypes = {
-    open: PropTypes.bool.isRequired,
-    isCurrent: PropTypes.bool.isRequired,
+    shouldBind: PropTypes.bool.isRequired,
     onTap: PropTypes.func,
     onDoubleTap: PropTypes.func,
     onPanStart: PropTypes.func,

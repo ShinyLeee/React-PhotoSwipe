@@ -1,7 +1,7 @@
 import React, { Component, PropTypes } from 'react';
 import {
   SectionHeader,
-  JustifiedGallery,
+  JustifiedLayout,
   ImageHolder,
   PlaceHolder,
   Image,
@@ -28,7 +28,7 @@ export default class Home extends Component {
       open: true,
       items,
       startIndex,
-      template: type === 'justifiedGallery' && true,
+      template: type === 'justifiedLayout' && true,
       sourceElement: this[type],
     });
   }
@@ -40,43 +40,45 @@ export default class Home extends Component {
       <main>
         <section className="section section__justified">
           <SectionHeader>Justified Gallery Example</SectionHeader>
-          <JustifiedGallery innerRef={(node) => { this.justifiedGallery = node; }}>
+          <JustifiedLayout innerRef={(node) => { this.justifiedLayout = node; }}>
             {
               images.map((image, i) => (
                 <ImageHolder
                   key={image.id}
-                  style={{ width: `${(image.width * 200) / image.height}px`, flexGrow: `${(image.width * 200) / image.height}` }}
+                  width={image.width}
+                  height={image.height}
+                  rowHeight={80}
                 >
-                  <PlaceHolder style={{ paddingBottom: `${(image.height / image.width) * 100}%` }} />
+                  <PlaceHolder width={image.width} height={image.height} />
                   <Image
-                    src={image.src}
-                    alt={`${image.id}.jpg`}
-                    onClick={() => this.handleOpenGallery(images, i, 'justifiedGallery')}
+                    src={image.msrc}
+                    onClick={() => this.handleOpenGallery(images, i, 'justifiedLayout')}
                   />
                 </ImageHolder>
               ))
             }
-          </JustifiedGallery>
+          </JustifiedLayout>
         </section>
         <section className="section section__minimal">
           <SectionHeader>Minimal Gallery Example</SectionHeader>
-          <JustifiedGallery innerRef={(node) => { this.minimalGallery = node; }}>
+          <JustifiedLayout innerRef={(node) => { this.minimalGallery = node; }}>
             {
               imagesB.map((image, i) => (
                 <ImageHolder
                   key={image.id}
-                  style={{ width: `${(image.width * 200) / image.height}px`, flexGrow: `${(image.width * 200) / image.height}` }}
+                  width={image.width}
+                  height={image.height}
+                  rowHeight={80}
                 >
-                  <PlaceHolder style={{ paddingBottom: `${(image.height / image.width) * 100}%` }} />
+                  <PlaceHolder width={image.width} height={image.height} />
                   <Image
-                    src={image.src}
-                    alt={`${image.id}.jpg`}
+                    src={image.msrc}
                     onClick={() => this.handleOpenGallery(imagesB, i, 'minimalGallery')}
                   />
                 </ImageHolder>
               ))
             }
-          </JustifiedGallery>
+          </JustifiedLayout>
         </section>
         <PhotoSwipe
           open={this.state.open}
@@ -97,41 +99,47 @@ Home.defaultProps = {
   images: [
     {
       id: 0,
-      src: '../img/0.jpg',
-      width: 1080,
-      height: 831,
+      msrc: 'https://c1.staticflickr.com/5/4155/34729323745_5f48b08d11_m.jpg',
+      src: 'https://c1.staticflickr.com/5/4155/34729323745_5f48b08d11_b.jpg',
+      width: 1024,
+      height: 683,
       title: 'Lorem Ipsum',
       desc: '无人爱苦，亦无人寻之欲之，乃因其苦...',
     },
     {
       id: 1,
-      src: '../img/1.jpg',
-      width: 474,
-      height: 523,
+      msrc: 'https://c1.staticflickr.com/5/4185/34567479622_f20c36c6df_m.jpg',
+      src: 'https://c1.staticflickr.com/5/4185/34567479622_f20c36c6df_b.jpg',
+      width: 1024,
+      height: 683,
       title: 'Very Long desc',
       desc: 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
     },
     {
       id: 2,
-      src: '../img/2.jpg',
-      width: 640,
-      height: 1922,
+      msrc: 'https://c1.staticflickr.com/5/4176/33873416524_6f7747056c_m.jpg',
+      src: 'https://c1.staticflickr.com/5/4176/33873416524_73c412f3ac_k.jpg',
+      width: 539,
+      height: 2048,
     },
     { id: 3,
-      src: '../img/3.jpg',
-      width: 2400,
-      height: 1600,
+      msrc: 'https://c1.staticflickr.com/5/4180/33906312003_65219c00d0_m.jpg',
+      src: 'https://c1.staticflickr.com/5/4180/33906312003_65219c00d0_b.jpg',
+      width: 1024,
+      height: 683,
     },
     { id: 4,
-      src: '../img/4.jpg',
-      width: 2400,
-      height: 1600,
+      msrc: 'https://c1.staticflickr.com/5/4161/33873409014_3bfc13000b_m.jpg',
+      src: 'https://c1.staticflickr.com/5/4161/33873409014_3bfc13000b_b.jpg',
+      width: 1024,
+      height: 683,
     },
     {
       id: 5,
-      src: '../img/5.jpg',
-      width: 1674,
-      height: 6362,
+      msrc: 'https://c1.staticflickr.com/5/4193/33920093523_c652cca848_m.jpg',
+      src: 'https://c1.staticflickr.com/5/4193/33920093523_c652cca848_b.jpg',
+      width: 683,
+      height: 1024,
     },
   ],
 };
