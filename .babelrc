@@ -11,6 +11,8 @@
     // Enables React code to work with HMR.
     "transform-object-rest-spread",
 
-    "transform-object-assign"
+    "transform-object-assign",
+
+    "transform-exponentiation-operator"
   ]
 }

@@ -1,4 +1,5 @@
-import React, { Component, PropTypes } from 'react';
+import React, { Component } from 'react';
+import PropTypes from 'prop-types';
 import { EnhancedWrapper, AnimWrapper, PlaceHolder, Image } from './styled';
 import { PAN_FRICTION_LEVEL, ZOOM_FRICTION_LEVEL, BOUNCE_BACK_DURATION } from '../../utils/constant';
 import { getEmptyPoint, isDomElement } from '../../utils';

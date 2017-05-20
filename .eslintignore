@@ -1,2 +1,3 @@
 dist/
+example/js
 src/utils/rAF.js

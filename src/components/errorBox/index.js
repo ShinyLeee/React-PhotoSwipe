@@ -1,5 +1,6 @@
 /* eslint-disable global-require */
-import React, { PropTypes } from 'react';
+import React from 'react';
+import PropTypes from 'prop-types';
 import { Wrapper } from './styled';
 
 const ErrorBox = ({ item }) => (

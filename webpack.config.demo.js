@@ -14,13 +14,12 @@ module.exports = {
       {
         test: /\.js$/,
         exclude: /node_modules/,
-        babelrc: false,
         use: {
           loader: 'babel-loader',
           options: {
             presets: ['es2015', 'react']
           }
-        },
+        }
       },
       {
         test: /\.svg$/,

@@ -1,15 +1,14 @@
 import React from 'react';
-import { IndexRoute, Route } from 'react-router';
+import { Route, Switch } from 'react-router-dom';
 
-import App from './components/App';
 import Home from './pages/Home';
 import NotFound from './pages/NotFound';
 
 const routes = () => (
-  <Route path="/" component={App}>
-    <IndexRoute component={Home} />
-    <Route path="*" component={NotFound} />
-  </Route>
+  <Switch>
+    <Route exact path="/" component={Home} />
+    <Route component={NotFound} />
+  </Switch>
 );
 
 export default routes;

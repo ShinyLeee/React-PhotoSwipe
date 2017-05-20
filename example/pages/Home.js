@@ -1,4 +1,5 @@
-import React, { Component, PropTypes } from 'react';
+import React, { Component } from 'react';
+import PropTypes from 'prop-types';
 import {
   SectionHeader,
   JustifiedLayout,
@@ -7,7 +8,6 @@ import {
   Image,
 } from './styled';
 import PhotoSwipe from '../../src/index';
-// import Template from '../components/Template';
 
 export default class Home extends Component {
 
