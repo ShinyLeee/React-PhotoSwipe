@@ -1,31 +1,17 @@
+/* eslint-disable class-methods-use-this */
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import { delay, now, getEmptyPoint, isClickableElement } from '../../utils/index';
+import { delay, now, getEmptyPoint, isValidPoint, isClickableElement } from '../../utils/index';
 import { rAF, cancelAnimation, cancelAllAnimations } from '../../utils/animation';
+import { MAX_TAP_OFFSET, MAX_TAP_INTERVAL } from '../../utils/constant';
 
 /**
  * @description React HOC that handle touch event and produce
  *              `tap`, `doubleTap`, `pan`, `swipe`, `pinch` and `zoom` for React-Photo-Swipe
  *              Inspired by AlloyFinger https://github.com/AlloyTeam/AlloyFinger
- *
- * @param {Function} ListenedComponent - The component want to listen below events
- * @param {Object}   options - Some useful options
  */
 
-const defaultOps = {
-  // The maximum position difference between multiple taps,
-  // exceeding will trigger `pan` event instead of `tap` event.
-  maxTapOffset: 10,
-
-  // The maximum time in ms between multiple taps,
-  // within this range doing multiple tap will trigger `doubleTap` instead of `tap`
-  maxTapInterval: 275,
-
-  // Minimal pan distance required before recognizing direction.
-  minPanDistance: 10,
-};
-
-export default function withGesture(ListenedComponent, options = defaultOps) {
+export default function withGesture(ListenedComponent) {
   class Gesture extends Component {
     constructor(props) {
       super(props);
@@ -42,6 +28,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       this.lastPanPos = getEmptyPoint();
       this.panAccDelta = getEmptyPoint();
       this.panDirection = undefined;
+      this.panStartTime = null;
       this.initPinchCenter = getEmptyPoint();
       this.pinchCenter = getEmptyPoint();
       this.handleTouchStart = this.handleTouchStart.bind(this);
@@ -75,7 +62,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       }
     }
 
-    getSwipeDirection() {
+    getDirection() {
       let direction;
       const finX = this.lastPanPos.x;
       const finY = this.lastPanPos.y;
@@ -89,13 +76,19 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
       return direction;
     }
 
+    getVelocity() {
+      const distance = this.panDirection === 'lr' ? this.panAccDelta.x : this.panAccDelta.y;
+      const duration = now() - this.panStartTime;
+      return Math.abs(distance) / duration;
+    }
+
     getPinchLen() {
       const hLen = this.currPos.x2 - this.currPos.x1;
       const vLen = this.currPos.y2 - this.currPos.y1;
       return Math.sqrt((hLen * hLen) + (vLen * vLen));
     }
 
-    getMiddlePoint(p) { // eslint-disable-line class-methods-use-this
+    getMiddlePoint(p) {
       return {
         x: Math.round((p.x1 + p.x2) * 0.5),
         y: Math.round((p.y1 + p.y2) * 0.5),
@@ -117,15 +110,13 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
     }
 
     checkIsTap() {
-      const { maxTapOffset } = options;
-      return Math.abs(this.currPos.x1 - this.tapPos.x) < maxTapOffset && Math.abs(this.currPos.y1 - this.tapPos.y) < maxTapOffset; // eslint-disable-line max-len
+      return Math.abs(this.currPos.x1 - this.tapPos.x) < MAX_TAP_OFFSET && Math.abs(this.currPos.y1 - this.tapPos.y) < MAX_TAP_OFFSET; // eslint-disable-line max-len
     }
 
     checkIsdoubleTap() {
       if (!this.lastTime) return false;
-      const { maxTapInterval } = options;
       const interval = this.currTime - this.lastTime;
-      if (interval > 0 && interval < maxTapInterval && this.checkIsTap()) {
+      if (interval > 0 && interval < MAX_TAP_INTERVAL && this.checkIsTap()) {
         return true;
       }
       return false;
@@ -156,7 +147,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         this.initPinchLen = this.getPinchLen();
         this.initPinchCenter = this.getMiddlePoint(this.currPos);
       } else {
-        if (this.tapPos.x !== null && this.tapPos.y !== null && this.checkIsdoubleTap()) {
+        if (isValidPoint(this.tapPos) && this.checkIsdoubleTap()) {
           clearTimeout(this.tapTimerId);
           this.isDoubleTap = true;
         }
@@ -193,7 +184,7 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
         } else {
           this.startPanPos.x = this.tapPos.x;
           this.startPanPos.y = this.tapPos.y;
-          if (this.lastPanPos.x !== null && this.lastPanPos.y !== null) {
+          if (isValidPoint(this.lastPanPos)) {
             evt.delta = {
               x: this.currPos.x1 - this.lastPanPos.x,
               y: this.currPos.y1 - this.lastPanPos.y,
@@ -201,11 +192,11 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
               accY: this.panAccDelta.y,
             };
             if (this.panDirection === undefined) {
-              const { minPanDistance } = options;
               const absPanAccDeltaX = Math.abs(this.panAccDelta.x);
               const absPanAccDeltaY = Math.abs(this.panAccDelta.y);
-              if (absPanAccDeltaX >= minPanDistance || absPanAccDeltaY >= minPanDistance) {
+              if (absPanAccDeltaX >= MAX_TAP_OFFSET || absPanAccDeltaY >= MAX_TAP_OFFSET) {
                 this.panDirection = absPanAccDeltaX > absPanAccDeltaY ? 'lr' : 'ud';
+                this.panStartTime = now();
                 evt.direction = this.panDirection;
                 this.emit('onPanStart', evt);
               }
@@ -247,25 +238,26 @@ export default function withGesture(ListenedComponent, options = defaultOps) {
           this.initPinchCenter = getEmptyPoint();
           this.pinchCenter = getEmptyPoint();
         }
-      } else if (this.checkIsTap() && !isClickableElement(e.target)) {
+      } else if (!isClickableElement(e.target) && this.checkIsTap()) {
         evt.position = this.tapPos;
         const emitTapEvent = () => this.emit('onTap', evt);
-        this.tapTimerId = delay(emitTapEvent, options.maxTapInterval);
+        this.tapTimerId = delay(emitTapEvent, MAX_TAP_INTERVAL);
         if (this.isDoubleTap) {
           clearTimeout(this.tapTimerId);
           this.emit('onDoubleTap', evt);
           this.tapPos = getEmptyPoint();
           this.isDoubleTap = false;
         }
-      } else if (this.lastPanPos.x !== null && this.lastPanPos.y !== null) {
-        evt.direction = this.getSwipeDirection();
+      } else if (isValidPoint(this.lastPanPos)) {
+        evt.direction = this.getDirection();
         evt.delta = { accX: this.panAccDelta.x, accY: this.panAccDelta.y };
+        evt.velocity = this.getVelocity();
         this.emit('onPanEnd', evt);
-        this.emit('onSwipe', evt); // TODO swipe velocity recognizer
         this.startPanPos = getEmptyPoint();
         this.lastPanPos = getEmptyPoint();
         this.panAccDelta = getEmptyPoint();
         this.panDirection = undefined;
+        this.panStartTime = null;
       }
       this.currPos.x2 = null;
       this.currPos.y2 = null;

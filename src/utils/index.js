@@ -12,7 +12,9 @@ export const getEmptyPoint = double => (
   : { x1: null, y1: null, x2: null, y2: null }
 );
 
-export const getScrollY = () => window.pageYOffset || document.documentElement.scrollTop;
+export const isValidPoint = point => (point.x !== null && point.y !== null);
+
+export const getScrollY = () => (window.pageYOffset || document.documentElement.scrollTop);
 
 export const isClickableElement = element => (element.tagName === 'A' || element.tagName === 'BUTTON');
 

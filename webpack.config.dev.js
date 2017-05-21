@@ -51,7 +51,8 @@ module.exports = {
     contentBase: path.resolve(__dirname, 'example'),
     port: 3000,
     publicPath: '/js',
-    host: '0.0.0.0'
+    host: '0.0.0.0',
+    disableHostCheck: true
   },
   plugins: [
     new webpack.HotModuleReplacementPlugin(),

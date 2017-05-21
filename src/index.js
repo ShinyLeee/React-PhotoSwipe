@@ -15,21 +15,24 @@ export default class PhotoSwipe extends Component {
     this.indexDiff = 0;
     this.scrollYOffset = null;
     this.viewportSize = { width: window.innerWidth, height: window.innerHeight };
-    this.loadedItems = []; // store loaded items' index
+    this.loadedItems = [];
     this.state = {
       open: false,
       currIndex: props.initIndex,
       itemHolders: undefined,
       loaded: false,
-      isTemplateOpen: false, // open template after zoom in
+      loadError: false,
+      isTemplateOpen: false,
     };
     this.zoomOutItemHolders = this.zoomOutItemHolders.bind(this);
     this.handleViewChange = this.handleViewChange.bind(this);
     this.handleItemTap = this.handleItemTap.bind(this);
     this.handleItemDoubleTap = this.handleItemDoubleTap.bind(this);
+    this.handleItemPanStart = this.handleItemPanStart.bind(this);
     this.handleItemPan = this.handleItemPan.bind(this);
-    this.handleItemSwipe = this.handleItemSwipe.bind(this);
+    this.handleItemPanEnd = this.handleItemPanEnd.bind(this);
     this.handleItemPinchStart = this.handleItemPinchStart.bind(this);
+    this.handleItemPinchEnd = this.handleItemPinchEnd.bind(this);
     this.handleBeforeItemZoomIn = this.handleBeforeItemZoomIn.bind(this);
     this.handleAfterItemZoomIn = this.handleAfterItemZoomIn.bind(this);
     this.handleItemLoad = this.handleItemLoad.bind(this);
@@ -110,15 +113,17 @@ export default class PhotoSwipe extends Component {
         overlay={this.overlay}
         onTap={this.handleItemTap}
         onDoubleTap={this.handleItemDoubleTap}
+        onPanStart={this.handleItemPanStart}
         onPan={this.handleItemPan}
-        onSwipe={this.handleItemSwipe}
+        onPanEnd={this.handleItemPanEnd}
         onPinchStart={this.handleItemPinchStart}
+        onPinchEnd={this.handleItemPinchEnd}
+        onItemLoad={this.handleItemLoad}
+        afterReset={this.handleItemReset}
         beforeZoomIn={this.handleBeforeItemZoomIn}
         afterZoomIn={this.handleAfterItemZoomIn}
-        onItemLoad={this.handleItemLoad}
         beforeZoomOut={this.handleBeforeItemZoomOut}
         afterZoomOut={this.handleAfterItemZoomOut}
-        afterReset={this.handleItemReset}
         {...others}
       />);
   }
@@ -199,8 +204,10 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  handleItemTap() {
-    if (this.props.template) {
+  handleItemTap(e, isZoom) {
+    if (this.props.onTap) {
+      this.props.onTap(e, isZoom);
+    } else if (this.props.template) {
       this.toggleTemplate(!this.state.isTemplateOpen);
     } else {
       // close gallery if it is a minimal gallery
@@ -208,37 +215,45 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  handleItemDoubleTap() {
-    this.toggleTemplate(false);
+  handleItemDoubleTap(e, isZoom) {
     if (this.props.onDoubleTap) {
-      this.props.onDoubleTap();
+      this.props.onDoubleTap(e, isZoom);
+    } else {
+      this.toggleTemplate(false);
     }
   }
 
-  handleItemPan(direction, panDelta) {
+  handleItemPanStart(e, isZoom) {
+    if (this.props.onPanStart) {
+      this.props.onPanStart(e, isZoom);
+    } else if (!isZoom && e.direction === 'ud') {
+      this.toggleTemplate(false);
+    }
+  }
+
+  handleItemPan({ direction, delta }) {
     const { items, loop } = this.props;
     const { currIndex } = this.state;
     if (direction === 'lr') {
       if (!loop || items.length < 3) {
         if (
-          (panDelta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
-          (panDelta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
+          (delta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
+          (delta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
-          const xPos = Math.round(this.wrapperXPos + (panDelta.accX * PAN_FRICTION_LEVEL));
+          const xPos = Math.round(this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL));
           this.applyContainerTransform(xPos, 0);
           return;
         }
       }
-      const xPos = this.wrapperXPos + panDelta.accX;
+      const xPos = this.wrapperXPos + delta.accX;
       this.applyContainerTransform(xPos, 0);
-    } else if (direction === 'ud') {
-      this.toggleTemplate(false);
     }
   }
 
-  handleItemSwipe(direction, delta) {
-    const { items, loop, swipeToThreshold } = this.props;
-    if (direction === 'Left' || direction === 'Right') {
+  handleItemPanEnd(e, isZoom) {
+    const { direction, delta, velocity } = e;
+    const { items, loop, swipeVelocity } = this.props;
+    if (!isZoom && (direction === 'Left' || direction === 'Right')) {
       if (!loop || items.length < 3) {
         if (
           (direction === 'Right' && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
@@ -250,12 +265,13 @@ export default class PhotoSwipe extends Component {
           return;
         }
       }
-      if (Math.abs(delta.accX) > (swipeToThreshold * this.viewportSize.width)) {
+      if ((velocity > swipeVelocity) || (Math.abs(delta.accX) > this.viewportSize.width * 0.5)) {
         const startXPos = this.wrapperXPos + delta.accX;
         const isToLeft = direction === 'Left';
         if (isToLeft) this.indexDiff += 1;
         else this.indexDiff -= 1;
         const endXPos = this.wrapperXPos; // Need update this.indexDiff in advance
+        this.props.beforeChange && this.props.beforeChange(this.state.currIndex);
         this.requestContainerAnimation(startXPos, endXPos, false, () => {
           this.setState((prevState) => {
             const indexDiff = isToLeft ? 1 : -1;
@@ -276,7 +292,7 @@ export default class PhotoSwipe extends Component {
               itemHolders: nextItemHolders,
               loaded: this.loadedItems.indexOf(nextIndex) > -1,
             };
-          });
+          }, () => this.props.afterChange && this.props.afterChange(this.state.currIndex));
         });
       } else {
         const startXPos = this.wrapperXPos + delta.accX;
@@ -284,25 +300,23 @@ export default class PhotoSwipe extends Component {
         this.requestContainerAnimation(startXPos, endXPos, true);
       }
     }
+    this.props.onPanEnd && this.props.onPanEnd(e, isZoom);
   }
 
-  handleItemPinchStart() {
-    this.toggleTemplate(false);
+  handleItemPinchStart(e, isZoom) {
+    if (this.props.onPinchStart) {
+      this.props.onPinchStart(e, isZoom);
+    } else {
+      this.toggleTemplate(false);
+    }
   }
 
-  handleBeforeItemZoomIn() {
-    this.props.beforeZoomIn && this.props.beforeZoomIn();
-  }
-
-  handleAfterItemZoomIn() {
-    this.toggleTemplate(true);
-    this.props.afterZoomIn && this.props.afterZoomIn();
+  handleItemPinchEnd(e, isZoom) {
+    this.props.onPinchEnd && this.props.onPinchEnd(e, isZoom);
   }
 
   handleItemLoad(err, itemIndex) {
-    if (err) {
-      this.setState({});
-    }
+    this.setState({ loadError: err });
     if (this.loadedItems.indexOf(itemIndex) === -1) {
       this.loadedItems.push(itemIndex);
     }
@@ -317,9 +331,27 @@ export default class PhotoSwipe extends Component {
     this.toggleTemplate(true);
   }
 
+  handleBeforeItemZoomIn(isFirstTime) {
+    if (this.props.beforeZoomIn) {
+      this.props.beforeZoomIn(isFirstTime);
+    }
+  }
+
+  handleAfterItemZoomIn(isFirstTime) {
+    if (this.props.afterZoomIn) {
+      this.props.afterZoomIn(isFirstTime);
+    } else {
+      this.toggleTemplate(true);
+    }
+  }
+
   handleBeforeItemZoomOut() {
     this.toggleTemplate(false);
-    this.props.beforeZoomOut && this.props.beforeZoomOut();
+    if (this.props.beforeZoomOut) {
+      this.props.beforeZoomOut();
+    } else {
+      this.toggleTemplate(false);
+    }
   }
 
   handleAfterItemZoomOut() {
@@ -347,6 +379,7 @@ export default class PhotoSwipe extends Component {
             items,
             currIndex: this.state.currIndex,
             loaded: this.state.loaded,
+            loadError: this.state.loadError,
             onClose: this.zoomOutItemHolders,
           })
           : template && (
@@ -355,6 +388,7 @@ export default class PhotoSwipe extends Component {
               items={items}
               currIndex={this.state.currIndex}
               loaded={this.state.loaded}
+              loadError={this.state.loadError}
               onClose={this.zoomOutItemHolders}
             />
           )
@@ -382,24 +416,20 @@ PhotoSwipe.defaultProps = {
   // Default error box template when item cannot be loaded.
   errorBox: <ErrorBox />,
 
-  // in / out animation duration
+  // In / out animation duration
   showHideDuration: 333,
 
-  // Spacing ratio between slides.
+  // Spacing ratio between slides,
   // For example, 0.12 will render as a 12% of sliding viewport width.
   spacing: 0.12,
 
-  // Maximum swipe distance based on percentage of viewport width,
-  // exceed it swipe left or right will swipe to next or prev image.
-  swipeToThreshold: 0.4,
+  // Minimal velocity that treat panEnd to swipe,
+  // For example, exceeding 0.3 will swipe to next item or close gallery.
+  swipeVelocity: 0.3,
 
-  // Maximum swipe distance based on percentage of viewport height,
-  // exceed it swipe down or up will swipe to close gallery.
-  swipeToCloseThreshold: 0.2,
-
-  // Minimum pinch scale based on percentage of original item
-  // below it when pinchEnd will close gallery.
-  // Set zero pinch will never close gallery.
+  // Minimum pinch scale based on percentage of original item,
+  // below it when pinchEnd will close gallery,
+  // For example, 0 will never close gallery.
   pinchToCloseThreshold: 0,
 
   // Maximum zoom scale based on item dimension when performing zoom gesture
@@ -428,13 +458,19 @@ PhotoSwipe.propTypes = {
   errorBox: PropTypes.element,
   showHideDuration: PropTypes.number,
   spacing: PropTypes.number,
-  swipeToThreshold: PropTypes.number,
-  swipeToCloseThreshold: PropTypes.number,
+  swipeVelocity: PropTypes.number,
   pinchToCloseThreshold: PropTypes.number,
   maxZoomScale: PropTypes.number,
 
   onClose: PropTypes.func.isRequired,
+  onTap: PropTypes.func,
   onDoubleTap: PropTypes.func,
+  onPanStart: PropTypes.func,
+  onPanEnd: PropTypes.func,
+  onPinchStart: PropTypes.func,
+  onPinchEnd: PropTypes.func,
+  beforeChange: PropTypes.func,
+  afterChange: PropTypes.func,
   beforeZoomIn: PropTypes.func,
   afterZoomIn: PropTypes.func,
   beforeZoomOut: PropTypes.func,

@@ -26,7 +26,6 @@ export default class ItemHolder extends Component {
     this.handlePanStart = this.handlePanStart.bind(this);
     this.handlePan = this.handlePan.bind(this);
     this.handlePanEnd = this.handlePanEnd.bind(this);
-    this.handleSwipe = this.handleSwipe.bind(this);
     this.handlePinchStart = this.handlePinchStart.bind(this);
     this.handlePinch = this.handlePinch.bind(this);
     this.handlePinchEnd = this.handlePinchEnd.bind(this);
@@ -34,15 +33,15 @@ export default class ItemHolder extends Component {
 
   componentDidMount() {
     if (this.isCurrentSlide) {
-      this.props.beforeZoomIn && this.props.beforeZoomIn(true); // initial zoom in
-      this.requestInAnimation(() => this.props.afterZoomIn && this.props.afterZoomIn(true));
+      this.props.beforeZoomIn(true); // initial zoom in
+      this.requestInAnimation(() => this.props.afterZoomIn(true));
     }
   }
 
   componentWillReceiveProps(nextProps) {
     if (this.props.zoomOut !== nextProps.zoomOut) {
       if (nextProps.zoomOut && this.isCurrentSlide) {
-        this.props.beforeZoomOut && this.props.beforeZoomOut();
+        this.props.beforeZoomOut();
         const initCenterPos = this.getAnimWrapperCenterPos();
         const start = { x: initCenterPos.x, y: initCenterPos.y, scale: 1, opacity: 1 };
         this.requestOutAnimation(start, null, () => this.resetZoomStatus(true));
@@ -57,8 +56,8 @@ export default class ItemHolder extends Component {
   componentDidUpdate(prevProps) {
     if (prevProps.open !== this.props.open) {
       if (this.props.open && this.isCurrentSlide) {
-        this.props.beforeZoomIn && this.props.beforeZoomIn(false);
-        this.requestInAnimation(() => this.props.afterZoomIn && this.props.afterZoomIn(false));
+        this.props.beforeZoomIn(false);
+        this.requestInAnimation(() => this.props.afterZoomIn(false));
       }
     }
   }
@@ -195,7 +194,7 @@ export default class ItemHolder extends Component {
     this.applyImageSize(this.getItemDimension());
     this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
     if (isZoomOut) {
-      this.props.afterZoomOut && this.props.afterZoomOut();
+      this.props.afterZoomOut();
     }
   }
 
@@ -378,7 +377,7 @@ export default class ItemHolder extends Component {
   }
 
   handleTap(e) {
-    this.props.onTap(e);
+    this.props.onTap(e, this.isZoom);
   }
 
   handleDoubleTap(e) {
@@ -397,26 +396,23 @@ export default class ItemHolder extends Component {
       const start = Object.assign({}, this.currPos, { scale: currScale });
       this.requestResetAnimation(start, () => {
         this.resetZoomStatus(false);
-        this.props.afterReset && this.props.afterReset('doubleTap');
+        this.props.afterReset('doubleTap');
       });
     }
-    this.props.onDoubleTap(e);
+    this.props.onDoubleTap(e, this.isZoom);
   }
 
   handlePanStart(e) {
-    this.props.onPanStart && this.props.onPanStart(e);
+    this.props.onPanStart(e, this.isZoom);
   }
 
   handlePan(e) {
     const { viewportSize } = this.props;
-    const direction = e.direction;
-    const delta = e.delta;
     if (this.isZoom) {
-      let currXPos = this.currPos.x + delta.accX;
-      let currYPos = this.currPos.y + delta.accY;
+      let currXPos = this.currPos.x + e.delta.accX;
+      let currYPos = this.currPos.y + e.delta.accY;
 
       const bounds = this.getItemBounds(this.currScale);
-      // If panning out of bounds we should make it hard to continue
       const offset = this.calculateOffset({ x: currXPos, y: currYPos }, bounds);
 
       if (offset.left > 0 || offset.right < 0 || offset.top > 0 || offset.bottom < 0) {
@@ -433,23 +429,23 @@ export default class ItemHolder extends Component {
         }
       }
       this.applyAnimWrapperTransform(currXPos, currYPos, this.currScale);
-    } else if (this.currScale === 1) {
-      if (direction === 'ud') {
-        const absAccY = Math.abs(delta.accY);
+    } else {
+      if (e.direction === 'ud') {
+        const absAccY = Math.abs(e.delta.accY);
         const opacity = Math.max(1 - (absAccY / viewportSize.height), 0);
         const initCenterPos = this.getAnimWrapperCenterPos();
         this.applyOverlayOpacity(opacity);
-        this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y + delta.accY, 1);
+        this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y + e.delta.accY, 1);
       }
-      this.props.onPan(direction, delta);
+      this.props.onPan(e);
     }
   }
 
+  // TODO add scrolling animation to zoomed item when swipe
   handlePanEnd(e) {
     if (this.isZoom) {
       this.preservedOffset.x += e.delta.accX;
       this.preservedOffset.y += e.delta.accY;
-      // If pan out of bounds we should bounce back
       if (this.outOfBounds) {
         const currPos = {
           x: this.currPos.x + e.delta.accX,
@@ -464,44 +460,36 @@ export default class ItemHolder extends Component {
         this.currPos.x += e.delta.accX;
         this.currPos.y += e.delta.accY;
       }
-    }
-  }
-
-  handleSwipe(e) {
-    if (!this.isZoom) {
-      const { sourceElement, viewportSize, swipeToCloseThreshold } = this.props;
-      const direction = e.direction;
-      const delta = e.delta;
-      const absVertDelta = Math.abs(delta.accY);
-      if ((direction === 'Up' || direction === 'Down')) {
-        const initCenterPos = this.getAnimWrapperCenterPos();
-        const start = {
+    } else if (e.direction === 'Up' || e.direction === 'Down') {
+      const { swipeVelocity, sourceElement, viewportSize } = this.props;
+      const absVertDelta = Math.abs(e.delta.accY);
+      const initCenterPos = this.getAnimWrapperCenterPos();
+      const start = {
+        x: initCenterPos.x,
+        y: initCenterPos.y + e.delta.accY,
+        scale: 1,
+        opacity: Math.max(1 - (absVertDelta / viewportSize.height), 0),
+      };
+      if (e.velocity > swipeVelocity || (absVertDelta > viewportSize.height * 0.5)) {
+        // Swipe out to top / bottom if sourceElement not defined.
+        const origDimension = this.getItemDimension();
+        const end = sourceElement === undefined ? {
           x: initCenterPos.x,
-          y: initCenterPos.y + delta.accY,
+          y: e.direction === 'Up' ? -origDimension.height : (initCenterPos.y * 2) + origDimension.height,
           scale: 1,
-          opacity: Math.max(1 - (absVertDelta / viewportSize.height), 0),
-        };
-        if (absVertDelta > (swipeToCloseThreshold * viewportSize.height)) {
-          // Swipe out if sourceElement not defined.
-          const origDimension = this.getItemDimension();
-          const end = sourceElement === undefined ? {
-            x: initCenterPos.x,
-            y: direction === 'Up' ? -origDimension.height : (initCenterPos.y * 2) + origDimension.height,
-            scale: 1,
-            opacity: 0,
-          } : null;
-          this.props.beforeZoomOut && this.props.beforeZoomOut();
-          this.requestOutAnimation(start, end, () => this.resetZoomStatus(true));
-        } else {
-          this.requestResetAnimation(start, () => this.props.afterReset && this.props.afterReset('swipe'));
-        }
+          opacity: 0,
+        } : null;
+        this.props.beforeZoomOut();
+        this.requestOutAnimation(start, end, () => this.resetZoomStatus(true));
+      } else {
+        this.requestResetAnimation(start, () => this.props.afterReset('panEnd'));
       }
-      this.props.onSwipe(direction, delta);
     }
+    this.props.onPanEnd(e, this.isZoom);
   }
 
   handlePinchStart(e) {
-    this.props.onPinchStart && this.props.onPinchStart(e);
+    this.props.onPinchStart(e, this.isZoom);
   }
 
   handlePinch(e) {
@@ -556,12 +544,12 @@ export default class ItemHolder extends Component {
       const currPos = this.calculatePinchPosition(pivotScale, pinchDelta);
       const start = Object.assign({}, currPos, { scale: currScale, opacity: pivotScale });
       if (pivotScale < pinchToCloseThreshold && sourceElement !== undefined) {
-        this.props.beforeZoomOut && this.props.beforeZoomOut();
+        this.props.beforeZoomOut();
         this.requestOutAnimation(start, null, () => this.resetZoomStatus(true));
       } else if (pivotScale < 1) {
         this.requestResetAnimation(start, () => {
           this.resetZoomStatus(false);
-          this.props.afterReset && this.props.afterReset('pinch');
+          this.props.afterReset('pinch');
         });
       } else {
         const nextScale = currScale;
@@ -580,11 +568,12 @@ export default class ItemHolder extends Component {
       this.preservedOffset.y += pinchDelta.y;
       this.requestZoomAnimation(currScale, nextScale, currPos, this.maxZoomPos);
     }
+    this.props.onPinchEnd(e, this.isZoom);
   }
 
   handleImageLoad(error) {
     this.setState({ loaded: true, loadError: error });
-    this.props.onItemLoad && this.props.onItemLoad(error, this.props.itemIndex);
+    this.props.onItemLoad(error, this.props.itemIndex);
   }
 
   render() {
@@ -633,35 +622,39 @@ export default class ItemHolder extends Component {
 
 ItemHolder.displayName = 'React-Photo-Swipe__ItemHolder';
 
+ItemHolder.defaultProps = {
+  zoomOut: false,
+};
+
 ItemHolder.propTypes = {
   open: PropTypes.bool.isRequired,
   item: PropTypes.object.isRequired,
   itemIndex: PropTypes.number.isRequired,
   currIndex: PropTypes.number.isRequired,
   indexDiff: PropTypes.number.isRequired,
-  viewportSize: PropTypes.object,
+  viewportSize: PropTypes.object.isRequired,
   sourceElement: isDomElement,
   overlay: isDomElement,
-  loop: PropTypes.bool,
-  errorBox: PropTypes.element,
-  zoomOut: PropTypes.bool,
-  spacing: PropTypes.number,
-  showHideDuration: PropTypes.number,
-  swipeToCloseThreshold: PropTypes.number,
-  pinchToCloseThreshold: PropTypes.number,
-  maxZoomScale: PropTypes.number,
-
-  onPanStart: PropTypes.func,
-  onPinchStart: PropTypes.func,
-  onPinch: PropTypes.func,
+  loop: PropTypes.bool.isRequired,
+  errorBox: PropTypes.element.isRequired,
+  zoomOut: PropTypes.bool.isRequired,
+  spacing: PropTypes.number.isRequired,
+  showHideDuration: PropTypes.number.isRequired,
+  swipeVelocity: PropTypes.number.isRequired,
+  pinchToCloseThreshold: PropTypes.number.isRequired,
+  maxZoomScale: PropTypes.number.isRequired,
   onTap: PropTypes.func.isRequired,
   onDoubleTap: PropTypes.func.isRequired,
+  onPanStart: PropTypes.func.isRequired,
   onPan: PropTypes.func.isRequired,
-  onSwipe: PropTypes.func.isRequired,
-  beforeZoomIn: PropTypes.func,
-  afterZoomIn: PropTypes.func,
-  onItemLoad: PropTypes.func,
-  afterReset: PropTypes.func,
-  beforeZoomOut: PropTypes.func,
-  afterZoomOut: PropTypes.func,
+  onPanEnd: PropTypes.func.isRequired,
+  onPinchStart: PropTypes.func.isRequired,
+  onPinch: PropTypes.func,
+  onPinchEnd: PropTypes.func.isRequired,
+  beforeZoomIn: PropTypes.func.isRequired,
+  afterZoomIn: PropTypes.func.isRequired,
+  onItemLoad: PropTypes.func.isRequired,
+  afterReset: PropTypes.func.isRequired,
+  beforeZoomOut: PropTypes.func.isRequired,
+  afterZoomOut: PropTypes.func.isRequired,
 };
