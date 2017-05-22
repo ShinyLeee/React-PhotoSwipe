@@ -9,6 +9,7 @@
     "chai": true
   },
   "rules": {
+    "max-len": 0,
     "no-unused-expressions": ["error", { "allowShortCircuit": true }],
     "no-underscore-dangle": 0,
     "import/no-extraneous-dependencies": 0,

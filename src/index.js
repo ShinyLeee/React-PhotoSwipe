@@ -6,7 +6,15 @@ import ErrorBox from './components/errorBox';
 import { Wrapper, Overlay, Container } from './styled';
 import { getScrollY, isDomElement } from './utils';
 import { on, off } from './utils/event';
-import { PAN_FRICTION_LEVEL, SWIPE_TO_DURATION, BOUNCE_BACK_DURATION } from './utils/constant';
+import {
+  PAN_FRICTION_LEVEL,
+  SWIPE_TO_DURATION,
+  BOUNCE_BACK_DURATION,
+  DIRECTION_HORZ,
+  DIRECTION_VERT,
+  DIRECTION_LEFT,
+  DIRECTION_RIGHT,
+} from './utils/constant';
 import { animate } from './utils/animation';
 
 export default class PhotoSwipe extends Component {
@@ -21,10 +29,9 @@ export default class PhotoSwipe extends Component {
       currIndex: props.initIndex,
       itemHolders: undefined,
       loaded: false,
-      loadError: false,
       isTemplateOpen: false,
     };
-    this.zoomOutItemHolders = this.zoomOutItemHolders.bind(this);
+    this.closeItemHolders = this.closeItemHolders.bind(this);
     this.handleViewChange = this.handleViewChange.bind(this);
     this.handleItemTap = this.handleItemTap.bind(this);
     this.handleItemDoubleTap = this.handleItemDoubleTap.bind(this);
@@ -57,7 +64,7 @@ export default class PhotoSwipe extends Component {
         currIndex: nextProps.open ? nextProps.initIndex : prevState.currIndex,
         itemHolders: nextProps.open
         ? this.initItemHolders(nextProps)
-        : this.updateItemHolders(prevState.itemHolders, { open: false }),
+        : this.updateItemHolders(prevState.itemHolders, { open: false, closing: false }),
       }));
     }
   }
@@ -183,9 +190,9 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  zoomOutItemHolders() {
+  closeItemHolders() {
     this.setState(prevState => ({
-      itemHolders: this.updateItemHolders(prevState.itemHolders, { zoomOut: true }),
+      itemHolders: this.updateItemHolders(prevState.itemHolders, { closing: true }),
     }));
   }
 
@@ -211,7 +218,7 @@ export default class PhotoSwipe extends Component {
       this.toggleTemplate(!this.state.isTemplateOpen);
     } else {
       // close gallery if it is a minimal gallery
-      this.zoomOutItemHolders();
+      this.closeItemHolders();
     }
   }
 
@@ -226,7 +233,7 @@ export default class PhotoSwipe extends Component {
   handleItemPanStart(e, isZoom) {
     if (this.props.onPanStart) {
       this.props.onPanStart(e, isZoom);
-    } else if (!isZoom && e.direction === 'ud') {
+    } else if (!isZoom && e.direction === DIRECTION_VERT) {
       this.toggleTemplate(false);
     }
   }
@@ -234,7 +241,7 @@ export default class PhotoSwipe extends Component {
   handleItemPan({ direction, delta }) {
     const { items, loop } = this.props;
     const { currIndex } = this.state;
-    if (direction === 'lr') {
+    if (direction === DIRECTION_HORZ) {
       if (!loop || items.length < 3) {
         if (
           (delta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
@@ -253,11 +260,11 @@ export default class PhotoSwipe extends Component {
   handleItemPanEnd(e, isZoom) {
     const { direction, delta, velocity } = e;
     const { items, loop, swipeVelocity } = this.props;
-    if (!isZoom && (direction === 'Left' || direction === 'Right')) {
+    if (!isZoom && (direction === DIRECTION_LEFT || direction === DIRECTION_RIGHT)) {
       if (!loop || items.length < 3) {
         if (
-          (direction === 'Right' && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
-          (direction === 'Left' && this.getItemIndex(this.state.currIndex + 1) === undefined)
+          (direction === DIRECTION_RIGHT && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
+          (direction === DIRECTION_LEFT && this.getItemIndex(this.state.currIndex + 1) === undefined)
         ) {
           const startXPos = Math.round(this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL));
           const endXPos = this.wrapperXPos;
@@ -267,7 +274,7 @@ export default class PhotoSwipe extends Component {
       }
       if ((velocity > swipeVelocity) || (Math.abs(delta.accX) > this.viewportSize.width * 0.5)) {
         const startXPos = this.wrapperXPos + delta.accX;
-        const isToLeft = direction === 'Left';
+        const isToLeft = direction === DIRECTION_LEFT;
         if (isToLeft) this.indexDiff += 1;
         else this.indexDiff -= 1;
         const endXPos = this.wrapperXPos; // Need update this.indexDiff in advance
@@ -315,8 +322,7 @@ export default class PhotoSwipe extends Component {
     this.props.onPinchEnd && this.props.onPinchEnd(e, isZoom);
   }
 
-  handleItemLoad(err, itemIndex) {
-    this.setState({ loadError: err });
+  handleItemLoad(itemIndex) {
     if (this.loadedItems.indexOf(itemIndex) === -1) {
       this.loadedItems.push(itemIndex);
     }
@@ -346,7 +352,6 @@ export default class PhotoSwipe extends Component {
   }
 
   handleBeforeItemZoomOut() {
-    this.toggleTemplate(false);
     if (this.props.beforeZoomOut) {
       this.props.beforeZoomOut();
     } else {
@@ -379,8 +384,7 @@ export default class PhotoSwipe extends Component {
             items,
             currIndex: this.state.currIndex,
             loaded: this.state.loaded,
-            loadError: this.state.loadError,
-            onClose: this.zoomOutItemHolders,
+            onClose: this.closeItemHolders,
           })
           : template && (
             <UITemplate
@@ -388,8 +392,7 @@ export default class PhotoSwipe extends Component {
               items={items}
               currIndex={this.state.currIndex}
               loaded={this.state.loaded}
-              loadError={this.state.loadError}
-              onClose={this.zoomOutItemHolders}
+              onClose={this.closeItemHolders}
             />
           )
         }

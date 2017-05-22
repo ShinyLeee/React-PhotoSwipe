@@ -1,7 +1,17 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import { EnhancedWrapper, AnimWrapper, PlaceHolder, Image } from './styled';
-import { PAN_FRICTION_LEVEL, ZOOM_FRICTION_LEVEL, BOUNCE_BACK_DURATION } from '../../utils/constant';
+import {
+  PAN_FRICTION_LEVEL,
+  ZOOM_FRICTION_LEVEL,
+  BOUNCE_BACK_DURATION,
+  DIRECTION_VERT,
+  DIRECTION_UP,
+  DIRECTION_DOWN,
+  OUT_TYPE_ZOOM,
+  OUT_TYPE_SWIPE_UP,
+  OUT_TYPE_SWIPE_DOWN,
+} from '../../utils/constant';
 import { getEmptyPoint, isDomElement } from '../../utils';
 import { animate } from '../../utils/animation';
 
@@ -39,12 +49,13 @@ export default class ItemHolder extends Component {
   }
 
   componentWillReceiveProps(nextProps) {
-    if (this.props.zoomOut !== nextProps.zoomOut) {
-      if (nextProps.zoomOut && this.isCurrentSlide) {
+    if (this.props.closing !== nextProps.closing) {
+      if (nextProps.closing && this.isCurrentSlide) {
         this.props.beforeZoomOut();
         const initCenterPos = this.getAnimWrapperCenterPos();
         const start = { x: initCenterPos.x, y: initCenterPos.y, scale: 1, opacity: 1 };
-        this.requestOutAnimation(start, null, () => this.resetZoomStatus(true));
+        const outType = nextProps.sourceElement !== undefined ? OUT_TYPE_ZOOM : OUT_TYPE_SWIPE_DOWN;
+        this.requestOutAnimation(start, outType, () => this.resetZoomStatus(true));
       }
     }
   }
@@ -184,7 +195,7 @@ export default class ItemHolder extends Component {
     return toZoomScale ? scale * fitRatio : scale * (1 / fitRatio);
   }
 
-  resetZoomStatus(isZoomOut) {
+  resetZoomStatus(isOut) {
     const initCenterPos = this.getAnimWrapperCenterPos();
     this.isZoom = false;
     this.scaleRatio = undefined;
@@ -193,7 +204,10 @@ export default class ItemHolder extends Component {
     this.currPos = initCenterPos;
     this.applyImageSize(this.getItemDimension());
     this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
-    if (isZoomOut) {
+    if (isOut) {
+      if (this.state.loadError) { // Allow reload item everytime if loadError
+        this.setState({ loaded: false, loadError: false });
+      }
       this.props.afterZoomOut();
     }
   }
@@ -350,15 +364,25 @@ export default class ItemHolder extends Component {
     );
   }
 
-  requestOutAnimation(start, end, callback) {
+  requestOutAnimation(start, outType, callback) {
+    let end;
     const { currIndex, sourceElement, showHideDuration } = this.props;
-    if (!end && sourceElement !== undefined) {
+    if (outType === OUT_TYPE_ZOOM) {
       const itemDimension = this.getItemDimension(this.isZoom);
       const thumbRect = sourceElement.childNodes[currIndex].getBoundingClientRect();
-      end = { // eslint-disable-line no-param-reassign
+      end = {
         x: thumbRect.left,
         y: thumbRect.top,
         scale: thumbRect.width / itemDimension.width,
+        opacity: 0,
+      };
+    } else if (outType === OUT_TYPE_SWIPE_UP || outType === OUT_TYPE_SWIPE_DOWN) {
+      const origDimension = this.getItemDimension();
+      const initCenterPos = this.getAnimWrapperCenterPos();
+      end = {
+        x: initCenterPos.x,
+        y: outType === OUT_TYPE_SWIPE_UP ? -origDimension.height : (initCenterPos.y * 2) + origDimension.height,
+        scale: 1,
         opacity: 0,
       };
     }
@@ -430,7 +454,7 @@ export default class ItemHolder extends Component {
       }
       this.applyAnimWrapperTransform(currXPos, currYPos, this.currScale);
     } else {
-      if (e.direction === 'ud') {
+      if (e.direction === DIRECTION_VERT) {
         const absAccY = Math.abs(e.delta.accY);
         const opacity = Math.max(1 - (absAccY / viewportSize.height), 0);
         const initCenterPos = this.getAnimWrapperCenterPos();
@@ -460,7 +484,7 @@ export default class ItemHolder extends Component {
         this.currPos.x += e.delta.accX;
         this.currPos.y += e.delta.accY;
       }
-    } else if (e.direction === 'Up' || e.direction === 'Down') {
+    } else if (e.direction === DIRECTION_UP || e.direction === DIRECTION_DOWN) {
       const { swipeVelocity, sourceElement, viewportSize } = this.props;
       const absVertDelta = Math.abs(e.delta.accY);
       const initCenterPos = this.getAnimWrapperCenterPos();
@@ -471,16 +495,11 @@ export default class ItemHolder extends Component {
         opacity: Math.max(1 - (absVertDelta / viewportSize.height), 0),
       };
       if (e.velocity > swipeVelocity || (absVertDelta > viewportSize.height * 0.5)) {
-        // Swipe out to top / bottom if sourceElement not defined.
-        const origDimension = this.getItemDimension();
-        const end = sourceElement === undefined ? {
-          x: initCenterPos.x,
-          y: e.direction === 'Up' ? -origDimension.height : (initCenterPos.y * 2) + origDimension.height,
-          scale: 1,
-          opacity: 0,
-        } : null;
+        const outType = sourceElement !== undefined // eslint-disable-line no-nested-ternary
+                        ? OUT_TYPE_ZOOM
+                        : e.direction === DIRECTION_UP ? OUT_TYPE_SWIPE_UP : OUT_TYPE_SWIPE_DOWN;
         this.props.beforeZoomOut();
-        this.requestOutAnimation(start, end, () => this.resetZoomStatus(true));
+        this.requestOutAnimation(start, outType, () => this.resetZoomStatus(true));
       } else {
         this.requestResetAnimation(start, () => this.props.afterReset('panEnd'));
       }
@@ -545,7 +564,7 @@ export default class ItemHolder extends Component {
       const start = Object.assign({}, currPos, { scale: currScale, opacity: pivotScale });
       if (pivotScale < pinchToCloseThreshold && sourceElement !== undefined) {
         this.props.beforeZoomOut();
-        this.requestOutAnimation(start, null, () => this.resetZoomStatus(true));
+        this.requestOutAnimation(start, OUT_TYPE_ZOOM, () => this.resetZoomStatus(true));
       } else if (pivotScale < 1) {
         this.requestResetAnimation(start, () => {
           this.resetZoomStatus(false);
@@ -561,7 +580,7 @@ export default class ItemHolder extends Component {
     } else {
       const nextScale = this.isZoom ? this.props.maxZoomScale : maxPivotScale;
       const slowScale = this.isZoom ? this.covertScale(currScale, false) : currScale;
-      const slowZoomScale = this.maxEventScale + ((e.scale - this.maxEventScale) * ZOOM_FRICTION_LEVEL); // eslint-disable-line max-len
+      const slowZoomScale = this.maxEventScale + ((e.scale - this.maxEventScale) * ZOOM_FRICTION_LEVEL);
       const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, slowZoomScale);
       const currPos = this.calculatePinchPosition(slowScale, pinchDelta);
       this.preservedOffset.x += pinchDelta.x;
@@ -573,7 +592,7 @@ export default class ItemHolder extends Component {
 
   handleImageLoad(error) {
     this.setState({ loaded: true, loadError: error });
-    this.props.onItemLoad(error, this.props.itemIndex);
+    this.props.onItemLoad(this.props.itemIndex);
   }
 
   render() {
@@ -589,7 +608,6 @@ export default class ItemHolder extends Component {
         onPanStart={this.handlePanStart}
         onPan={this.handlePan}
         onPanEnd={this.handlePanEnd}
-        onSwipe={this.handleSwipe}
         onPinchStart={this.handlePinchStart}
         onPinch={this.handlePinch}
         onPinchEnd={this.handlePinchEnd}
@@ -604,15 +622,21 @@ export default class ItemHolder extends Component {
             : <PlaceHolder style={origDimension} />
           }
           {
-            this.state.loadError
-            ? <PlaceHolder style={origDimension}>{React.cloneElement(errorBox, { item })}</PlaceHolder> // eslint-disable-line max-len
-            : <Image
-              src={item.src}
-              style={origDimension}
-              innerRef={(node) => { this.image = node; }}
-              onLoad={() => this.handleImageLoad(false)}
-              onError={() => this.handleImageLoad(true)}
-            />
+            !this.state.loadError
+            ? (
+              <Image
+                src={item.src}
+                style={origDimension}
+                innerRef={(node) => { this.image = node; }}
+                onLoad={() => this.handleImageLoad(false)}
+                onError={() => this.handleImageLoad(true)}
+              />
+            )
+            : (
+              <PlaceHolder style={origDimension}>
+                { React.cloneElement(errorBox, { item }) }
+              </PlaceHolder>
+            )
           }
         </AnimWrapper>
       </EnhancedWrapper>
@@ -623,11 +647,12 @@ export default class ItemHolder extends Component {
 ItemHolder.displayName = 'React-Photo-Swipe__ItemHolder';
 
 ItemHolder.defaultProps = {
-  zoomOut: false,
+  closing: false,
 };
 
 ItemHolder.propTypes = {
   open: PropTypes.bool.isRequired,
+  closing: PropTypes.bool.isRequired,
   item: PropTypes.object.isRequired,
   itemIndex: PropTypes.number.isRequired,
   currIndex: PropTypes.number.isRequired,
@@ -637,7 +662,6 @@ ItemHolder.propTypes = {
   overlay: isDomElement,
   loop: PropTypes.bool.isRequired,
   errorBox: PropTypes.element.isRequired,
-  zoomOut: PropTypes.bool.isRequired,
   spacing: PropTypes.number.isRequired,
   showHideDuration: PropTypes.number.isRequired,
   swipeVelocity: PropTypes.number.isRequired,

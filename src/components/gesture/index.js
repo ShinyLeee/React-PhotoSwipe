@@ -3,7 +3,16 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import { delay, now, getEmptyPoint, isValidPoint, isClickableElement } from '../../utils/index';
 import { rAF, cancelAnimation, cancelAllAnimations } from '../../utils/animation';
-import { MAX_TAP_OFFSET, MAX_TAP_INTERVAL } from '../../utils/constant';
+import {
+  MAX_TAP_OFFSET,
+  MAX_TAP_INTERVAL,
+  DIRECTION_HORZ,
+  DIRECTION_VERT,
+  DIRECTION_UP,
+  DIRECTION_DOWN,
+  DIRECTION_LEFT,
+  DIRECTION_RIGHT,
+} from '../../utils/constant';
 
 /**
  * @description React HOC that handle touch event and produce
@@ -68,16 +77,16 @@ export default function withGesture(ListenedComponent) {
       const finY = this.lastPanPos.y;
       const satX = this.startPanPos.x;
       const satY = this.startPanPos.y;
-      if (this.panDirection === 'lr') {
-        direction = finX - satX > 0 ? 'Right' : 'Left';
-      } else if (this.panDirection === 'ud') {
-        direction = finY - satY > 0 ? 'Down' : 'Up';
+      if (this.panDirection === DIRECTION_HORZ) {
+        direction = finX - satX > 0 ? DIRECTION_RIGHT : DIRECTION_LEFT;
+      } else if (this.panDirection === DIRECTION_VERT) {
+        direction = finY - satY > 0 ? DIRECTION_DOWN : DIRECTION_UP;
       }
       return direction;
     }
 
     getVelocity() {
-      const distance = this.panDirection === 'lr' ? this.panAccDelta.x : this.panAccDelta.y;
+      const distance = this.panDirection === DIRECTION_HORZ ? this.panAccDelta.x : this.panAccDelta.y;
       const duration = now() - this.panStartTime;
       return Math.abs(distance) / duration;
     }
@@ -110,7 +119,8 @@ export default function withGesture(ListenedComponent) {
     }
 
     checkIsTap() {
-      return Math.abs(this.currPos.x1 - this.tapPos.x) < MAX_TAP_OFFSET && Math.abs(this.currPos.y1 - this.tapPos.y) < MAX_TAP_OFFSET; // eslint-disable-line max-len
+      return Math.abs(this.currPos.x1 - this.tapPos.x) < MAX_TAP_OFFSET &&
+             Math.abs(this.currPos.y1 - this.tapPos.y) < MAX_TAP_OFFSET;
     }
 
     checkIsdoubleTap() {
@@ -195,7 +205,7 @@ export default function withGesture(ListenedComponent) {
               const absPanAccDeltaX = Math.abs(this.panAccDelta.x);
               const absPanAccDeltaY = Math.abs(this.panAccDelta.y);
               if (absPanAccDeltaX >= MAX_TAP_OFFSET || absPanAccDeltaY >= MAX_TAP_OFFSET) {
-                this.panDirection = absPanAccDeltaX > absPanAccDeltaY ? 'lr' : 'ud';
+                this.panDirection = absPanAccDeltaX > absPanAccDeltaY ? DIRECTION_HORZ : DIRECTION_VERT;
                 this.panStartTime = now();
                 evt.direction = this.panDirection;
                 this.emit('onPanStart', evt);

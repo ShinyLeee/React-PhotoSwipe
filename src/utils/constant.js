@@ -1,9 +1,7 @@
 export const PAN_FRICTION_LEVEL = 0.3;
-
 export const ZOOM_FRICTION_LEVEL = 0.1;
 
 export const SWIPE_TO_DURATION = 333;
-
 export const BOUNCE_BACK_DURATION = 200;
 
 // The maximum tap position offset between multiple taps,
@@ -13,3 +11,14 @@ export const MAX_TAP_OFFSET = 10;
 // The maximum time in ms between multiple taps,
 // within this range doing multiple tap will trigger `doubleTap` instead of `tap`.
 export const MAX_TAP_INTERVAL = 275;
+
+export const DIRECTION_HORZ = 'horz';
+export const DIRECTION_VERT = 'vert';
+export const DIRECTION_UP = 'up';
+export const DIRECTION_DOWN = 'down';
+export const DIRECTION_LEFT = 'left';
+export const DIRECTION_RIGHT = 'right';
+
+export const OUT_TYPE_ZOOM = 0;
+export const OUT_TYPE_SWIPE_UP = 1;
+export const OUT_TYPE_SWIPE_DOWN = 2;
