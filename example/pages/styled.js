@@ -36,3 +36,32 @@ export const Image = styled.img`
   width: 100%;
   vertical-align: bottom;
 `;
+
+export const GridLayout = styled.div`
+  margin: ${props => `-${props.gap / 2}px`};
+`;
+
+export const GridTile = styled.div`
+  position: relative;
+  display: inline-block;
+  width: ${props => `${(100 / props.columns)}%`};
+  height: 0;
+  padding: ${props => `0 ${props.gap / 2}px`};
+  padding-bottom: ${props => `${100 / props.columns}%`};
+  vertical-align: top;
+`;
+
+export const GridImageHolder = styled.div`
+  position: absolute;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  background-color: #eee;
+  transform: translate3d(0px, 0px, 0px);
+  overflow: hidden;
+`;
+
+export const GridImage = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+`;

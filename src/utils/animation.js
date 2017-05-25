@@ -1,5 +1,7 @@
 import './rAF';
 
+const hasOwnProperty = Object.prototype.hasOwnProperty;
+
 const easing = {
   sineOut: pos => Math.sin(pos * (Math.PI / 2)),
   sineInOut: pos => -(Math.cos(Math.PI * pos) - 1) / 2,
@@ -71,12 +73,13 @@ export const animate = (name, start, end, duration, easingType, onUpdate, onComp
         animations[name].rAF = window.requestAnimationFrame(tick);
         if (!isMultiple) onUpdate(start + ((end - start) * t));
         else {
-          onUpdate({
-            x: start.x !== undefined && start.x + ((end.x - start.x) * t),
-            y: start.y !== undefined && start.y + ((end.y - start.y) * t),
-            scale: start.scale !== undefined && start.scale + ((end.scale - start.scale) * t),
-            opacity: start.opacity !== undefined && start.opacity + ((end.opacity - start.opacity) * t), // eslint-disable-line max-len
-          });
+          const ret = {};
+          for (const prop in start) { // eslint-disable-line no-restricted-syntax
+            if (hasOwnProperty.call(start, prop) && hasOwnProperty.call(end, prop)) {
+              ret[prop] = start[prop] + ((end[prop] - start[prop]) * t);
+            }
+          }
+          onUpdate(ret);
         }
       } else {
         cancelAnimation(name);
