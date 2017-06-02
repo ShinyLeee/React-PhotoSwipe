@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import { EnhancedWrapper, AnimWrapper, CroppedBox, VisibleBox, PlaceHolder, Image } from './styled';
+import AnimationBox from './components/animationBox';
+import EnhancedWrapper from './styled';
 import {
   PAN_FRICTION_LEVEL,
   ZOOM_FRICTION_LEVEL,
@@ -22,9 +23,9 @@ export default class ItemHolder extends Component {
       loaded: false,
       loadError: false,
     };
-    const origDimension = this.getItemDimension();
-    this.longSide = Math.max(origDimension.width, origDimension.height);
-    this.shortSide = Math.min(origDimension.width, origDimension.height);
+    const fitDimension = this.getItemDimension();
+    this.longSide = Math.max(fitDimension.width, fitDimension.height);
+    this.shortSide = Math.min(fitDimension.width, fitDimension.height);
     this.isCropped = false;
     this.isZoom = false;
     this.scaleRatio = undefined;
@@ -43,6 +44,7 @@ export default class ItemHolder extends Component {
     this.handlePinchStart = this.handlePinchStart.bind(this);
     this.handlePinch = this.handlePinch.bind(this);
     this.handlePinchEnd = this.handlePinchEnd.bind(this);
+    this.handleImageLoad = this.handleImageLoad.bind(this);
   }
 
   componentDidMount() {
@@ -145,8 +147,8 @@ export default class ItemHolder extends Component {
     this.props.overlay.style.opacity = opacity;
   }
 
-  applyAnimWrapperTransform(x, y, scale) {
-    this.animWrapper.style.transform = `translate3d(${x}px, ${y}px, 0px) scale(${scale})`;
+  applyAnimationBoxTransform(x, y, scale) {
+    this.animationBox.style.transform = `translate3d(${x}px, ${y}px, 0px) scale(${scale})`;
   }
 
   applyCroppedBoxTransform(s1, s2) {
@@ -212,7 +214,7 @@ export default class ItemHolder extends Component {
     this.preservedOffset = getEmptyPoint();
     this.currPos = initCenterPos;
     this.applyImageSize(this.getItemDimension());
-    this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y, 1);
+    this.applyAnimationBoxTransform(initCenterPos.x, initCenterPos.y, 1);
     if (isOut) {
       if (this.state.loadError) { // Allow reload item everytime if loadError
         this.setState({ loaded: false, loadError: false });
@@ -222,27 +224,24 @@ export default class ItemHolder extends Component {
   }
 
   requestInAnimation(callback) {
-    const { currIndex, sourceElement, showHideDuration } = this.props;
+    const { currIndex, cropped, sourceElement, showHideDuration } = this.props;
     let start = 0;
     let end = 1;
     if (sourceElement !== undefined) {
       const initCenterPos = this.getAnimWrapperCenterPos();
       const thumbRect = sourceElement.childNodes[currIndex].querySelector('img').getBoundingClientRect();
       const shortRectSide = Math.min(thumbRect.width, thumbRect.height);
-      const rectRatio = thumbRect.width / thumbRect.height;
-      if (rectRatio === 1) this.isCropped = true;
-      else this.isCropped = false;
       start = {
         x: thumbRect.left,
         y: thumbRect.top,
         scale: shortRectSide / this.shortSide,
-        croppedScale: this.isCropped && shortRectSide / this.longSide,
+        croppedScale: cropped && shortRectSide / this.longSide,
         opacity: 0,
       };
       end = {
         x: initCenterPos.x,
         y: initCenterPos.y,
-        croppedScale: this.isCropped && 1,
+        croppedScale: cropped && 1,
         scale: 1,
         opacity: 1,
       };
@@ -256,8 +255,8 @@ export default class ItemHolder extends Component {
       (pos) => {
         if (sourceElement !== undefined) {
           this.applyOverlayOpacity(pos.opacity);
-          this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale);
-          if (this.isCropped) {
+          this.applyAnimationBoxTransform(pos.x, pos.y, pos.scale);
+          if (cropped) {
             const ratio = pos.croppedScale / pos.scale;
             const reverseRatio = 1 / ratio;
             this.applyCroppedBoxTransform(ratio, reverseRatio);
@@ -271,8 +270,8 @@ export default class ItemHolder extends Component {
   }
 
   requestOutAnimation(start, outType, callback) {
+    const { currIndex, cropped, sourceElement, showHideDuration } = this.props;
     let end;
-    const { currIndex, sourceElement, showHideDuration } = this.props;
     if (outType === OUT_TYPE_ZOOM) {
       const thumbRect = sourceElement.childNodes[currIndex].querySelector('img').getBoundingClientRect();
       const shortRectSide = Math.min(thumbRect.width, thumbRect.height);
@@ -284,11 +283,11 @@ export default class ItemHolder extends Component {
         opacity: 0,
       };
     } else if (outType === OUT_TYPE_SWIPE_UP || outType === OUT_TYPE_SWIPE_DOWN) {
-      const origDimension = this.getItemDimension();
+      const fitDimension = this.getItemDimension();
       const initCenterPos = this.getAnimWrapperCenterPos();
       end = {
         x: initCenterPos.x,
-        y: outType === OUT_TYPE_SWIPE_UP ? -origDimension.height : (initCenterPos.y * 2) + origDimension.height,
+        y: outType === OUT_TYPE_SWIPE_UP ? -fitDimension.height : (initCenterPos.y * 2) + fitDimension.height,
         scale: 1,
         opacity: 0,
       };
@@ -301,8 +300,8 @@ export default class ItemHolder extends Component {
       'easeOutCubic',
       (pos) => {
         this.applyOverlayOpacity(pos.opacity);
-        this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale);
-        if (this.isCropped) {
+        this.applyAnimationBoxTransform(pos.x, pos.y, pos.scale);
+        if (cropped) {
           const ratio = pos.croppedScale / pos.scale;
           const reverseRatio = 1 / ratio;
           this.applyCroppedBoxTransform(ratio, reverseRatio);
@@ -348,16 +347,16 @@ export default class ItemHolder extends Component {
       end,
       BOUNCE_BACK_DURATION,
       'sineOut',
-      pos => this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale),
+      pos => this.applyAnimationBoxTransform(pos.x, pos.y, pos.scale),
       () => {
         if (!this.isZoom) {
           const zoomedScale = this.covertScale(nextScale, true);
           const zoomedItemDimension = this.getItemDimension(true);
           this.applyImageSize(zoomedItemDimension);
-          this.applyAnimWrapperTransform(end.x, end.y, zoomedScale);
+          this.applyAnimationBoxTransform(end.x, end.y, zoomedScale);
           this.currScale = zoomedScale;
         } else {
-          this.applyAnimWrapperTransform(end.x, end.y, nextScale);
+          this.applyAnimationBoxTransform(end.x, end.y, nextScale);
           this.currScale = nextScale;
         }
         this.isZoom = true;
@@ -402,7 +401,7 @@ export default class ItemHolder extends Component {
       end,
       BOUNCE_BACK_DURATION,
       'sineOut',
-      pos => this.applyAnimWrapperTransform(pos.x, pos.y, this.currScale),
+      pos => this.applyAnimationBoxTransform(pos.x, pos.y, this.currScale),
       () => callback && callback(end),
     );
   }
@@ -419,7 +418,7 @@ export default class ItemHolder extends Component {
       'sineOut',
       (pos) => {
         this.applyOverlayOpacity(pos.opacity);
-        this.applyAnimWrapperTransform(pos.x, pos.y, pos.scale);
+        this.applyAnimationBoxTransform(pos.x, pos.y, pos.scale);
       },
       () => callback && callback(),
     );
@@ -477,14 +476,14 @@ export default class ItemHolder extends Component {
           currYPos = Math.round(bounds.y.bottom + (offset.bottom * PAN_FRICTION_LEVEL));
         }
       }
-      this.applyAnimWrapperTransform(currXPos, currYPos, this.currScale);
+      this.applyAnimationBoxTransform(currXPos, currYPos, this.currScale);
     } else {
       if (e.direction === DIRECTION_VERT) {
         const absAccY = Math.abs(e.delta.accY);
         const opacity = Math.max(1 - (absAccY / viewportSize.height), 0);
         const initCenterPos = this.getAnimWrapperCenterPos();
         this.applyOverlayOpacity(opacity);
-        this.applyAnimWrapperTransform(initCenterPos.x, initCenterPos.y + e.delta.accY, 1);
+        this.applyAnimationBoxTransform(initCenterPos.x, initCenterPos.y + e.delta.accY, 1);
       }
       this.props.onPan(e);
     }
@@ -555,7 +554,7 @@ export default class ItemHolder extends Component {
       }
       const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, e.scale);
       const nextPos = this.calculatePinchPosition(pivotScale, pinchDelta);
-      this.applyAnimWrapperTransform(nextPos.x, nextPos.y, realScale);
+      this.applyAnimationBoxTransform(nextPos.x, nextPos.y, realScale);
       this.currScale = realScale;
     } else if (pivotScale > maxPivotScale) {
       if (this.maxZoomPos.x === null || this.maxZoomPos.y === null) {
@@ -570,7 +569,7 @@ export default class ItemHolder extends Component {
       if (this.isZoom) {
         slowScale = this.covertScale(slowScale, true);
       }
-      this.applyAnimWrapperTransform(nextPos.x, nextPos.y, slowScale);
+      this.applyAnimationBoxTransform(nextPos.x, nextPos.y, slowScale);
       this.currScale = slowScale;
     }
   }
@@ -623,10 +622,6 @@ export default class ItemHolder extends Component {
 
   render() {
     const { open, item, errorBox } = this.props;
-    const origDimension = this.getItemDimension();
-    if (this.isCurrentSlide) {
-      console.log(item.id);
-    }
     return (
       <EnhancedWrapper
         shouldBind={open && this.isCurrentSlide}
@@ -640,41 +635,18 @@ export default class ItemHolder extends Component {
         onPinch={this.handlePinch}
         onPinchEnd={this.handlePinchEnd}
       >
-        <AnimWrapper innerRef={(node) => { this.animWrapper = node; }}>
-          <CroppedBox
-            side={this.longSide}
-            innerRef={(node) => { this.croppedBox = node; }}
-          >
-            <VisibleBox
-              side={this.longSide}
-              shape={item.width > item.height ? 'landscape' : 'portrait'}
-              innerRef={(node) => { this.visibleBox = node; }}
-            >
-              {
-                item.msrc
-                ? <Image src={item.msrc} style={origDimension} />
-                : <PlaceHolder style={origDimension} />
-              }
-              {
-                !this.state.loadError
-                ? (
-                  <Image
-                    src={item.src}
-                    style={origDimension}
-                    innerRef={(node) => { this.image = node; }}
-                    onLoad={() => this.handleImageLoad(false)}
-                    onError={() => this.handleImageLoad(true)}
-                  />
-                )
-                : (
-                  <PlaceHolder style={origDimension}>
-                    { React.cloneElement(errorBox, { item }) }
-                  </PlaceHolder>
-                )
-              }
-            </VisibleBox>
-          </CroppedBox>
-        </AnimWrapper>
+        <AnimationBox
+          initPos={this.getAnimWrapperCenterPos()}
+          item={item}
+          fitDimension={this.getItemDimension()}
+          loadError={this.state.loadError}
+          errorBox={errorBox}
+          rootRef={(el) => { this.animationBox = el; }}
+          croppedBoxRef={(el) => { this.croppedBox = el; }}
+          visibleBoxRef={(el) => { this.visibleBox = el; }}
+          imageRef={(el) => { this.image = el; }}
+          onImageLoad={this.handleImageLoad}
+        />
       </EnhancedWrapper>
     );
   }
@@ -694,6 +666,7 @@ ItemHolder.propTypes = {
   currIndex: PropTypes.number.isRequired,
   indexDiff: PropTypes.number.isRequired,
   viewportSize: PropTypes.object.isRequired,
+  cropped: PropTypes.bool.isRequired,
   sourceElement: isDomElement,
   overlay: isDomElement,
   loop: PropTypes.bool.isRequired,

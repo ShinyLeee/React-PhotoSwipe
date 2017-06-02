@@ -1,6 +1,6 @@
 import shortid from 'shortid';
 
-export const imagesA = [
+const imagesA = [
   {
     id: shortid.generate(),
     msrc: 'https://c1.staticflickr.com/5/4155/34729323745_5f48b08d11_m.jpg',
@@ -47,14 +47,20 @@ export const imagesA = [
   },
 ];
 
-export const imagesB = imagesA.map((image) => {
-  const imageB = image;
-  imageB.id = shortid.generate();
-  return imageB;
+const imagesB = imagesA.map((image) => {
+  const newImage = Object.assign({}, image);
+  newImage.id = shortid.generate();
+  return newImage;
 });
 
-export const imagesC = imagesA.map((image) => {
-  const imageC = image;
-  imageC.id = shortid.generate();
-  return imageC;
+const imagesC = imagesA.map((image) => {
+  const newImage = Object.assign({}, image);
+  newImage.id = shortid.generate();
+  return newImage;
 });
+
+export {
+  imagesA,
+  imagesB,
+  imagesC,
+};

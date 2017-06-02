@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import ItemHolder from './components/itemHolder';
 import UITemplate from './components/ui-template';
-import ErrorBox from './components/errorBox';
+import ErrorBox from './components/itemHolder/components/errorBox';
 import { Wrapper, Overlay, Container } from './styled';
 import { getScrollY, isDomElement } from './utils';
 import { on, off } from './utils/event';
@@ -408,6 +408,8 @@ PhotoSwipe.defaultProps = {
 
   initIndex: 0,
 
+  cropped: false,
+
   // If true image will be able to swipe from last to first.
   loop: true,
 
@@ -452,6 +454,7 @@ PhotoSwipe.propTypes = {
     height: PropTypes.number.isRequired,
   })).isRequired,
   initIndex: PropTypes.number.isRequired,
+  cropped: PropTypes.bool.isRequired,
   sourceElement: isDomElement,
   loop: PropTypes.bool,
   template: PropTypes.oneOfType([

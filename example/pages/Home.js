@@ -33,8 +33,9 @@ export default class Home extends Component {
       open: true,
       items,
       startIndex,
-      template: type === 'justifiedLayout' && true,
+      cropped: type === 'gridLayout',
       sourceElement: this[type],
+      template: type === 'justifiedLayout',
     });
   }
 
@@ -43,7 +44,7 @@ export default class Home extends Component {
     return (
       <main>
         <section className="section section__minimal">
-          <SectionHeader>Minimal Layout Gallery Example</SectionHeader>
+          <SectionHeader>Minimal Layout Example</SectionHeader>
           <JustifiedLayout innerRef={(node) => { this.minimalLayout = node; }}>
             {
               minimal.map((image, i) => (
@@ -64,7 +65,7 @@ export default class Home extends Component {
           </JustifiedLayout>
         </section>
         <section className="section section__justified">
-          <SectionHeader>justified Layout Gallery Example</SectionHeader>
+          <SectionHeader>Justified Layout Example</SectionHeader>
           <JustifiedLayout innerRef={(node) => { this.justifiedLayout = node; }}>
             {
               justified.map((image, i) => (
@@ -85,7 +86,7 @@ export default class Home extends Component {
           </JustifiedLayout>
         </section>
         <section className="section section__grid">
-          <SectionHeader>Grid Layout Gallery Example</SectionHeader>
+          <SectionHeader>Grid Layout Example</SectionHeader>
           <GridLayout
             innerRef={(node) => { this.gridLayout = node; }}
             gap={4}
@@ -112,8 +113,9 @@ export default class Home extends Component {
           open={this.state.open}
           items={this.state.items}
           initIndex={this.state.startIndex}
-          template={this.state.template}
+          cropped={this.state.cropped}
           sourceElement={this.state.sourceElement}
+          template={this.state.template}
           onClose={() => this.setState({ open: false })}
         />
       </main>
