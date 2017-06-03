@@ -1,6 +1,6 @@
 import styled from 'styled-components';
 
-export const Wrapper = styled.div`
+const Wrapper = styled.div`
   visibility: visible;
   opacity: ${props => (props.open ? 1 : 0.01)};
   transition: opacity 333ms cubic-bezier(0.4, 0, 0.22, 1);
@@ -8,7 +8,7 @@ export const Wrapper = styled.div`
   z-index: 1550;
 `;
 
-export const Header = styled.div`
+const Header = styled.div`
   position: absolute;
   left: 0;
   top: 0;
@@ -17,7 +17,7 @@ export const Header = styled.div`
   background-color: rgba(0, 0, 0, 0.3);
 `;
 
-export const Counter = styled.div`
+const Counter = styled.div`
   position: absolute;
   left: 0;
   top: 0;
@@ -29,7 +29,7 @@ export const Counter = styled.div`
   padding: 0 12px;
 `;
 
-export const ButtonGroup = styled.div`
+const ButtonGroup = styled.div`
   position: absolute;
   right: 0;
   top: 0;
@@ -37,7 +37,7 @@ export const ButtonGroup = styled.div`
   cursor: pointer;
 `;
 
-export const Button = styled.button`
+const Button = styled.button`
   display: inline-block;
   width: 44px;
   height: 44px;
@@ -50,7 +50,7 @@ export const Button = styled.button`
   outline: none;
 `;
 
-export const Footer = styled.div`
+const Footer = styled.div`
   position: absolute;
   left: 0;
   bottom: 0;
@@ -59,7 +59,7 @@ export const Footer = styled.div`
   background-color: rgba(0, 0, 0, 0.3);
 `;
 
-export const Caption = styled.div`
+const Caption = styled.div`
   margin: 0 auto;
   padding: 10px;
   font-size: 13px;
@@ -87,3 +87,21 @@ export const Caption = styled.div`
     overflow: hidden;
   }
 `;
+
+Wrapper.displayName = 'Sc__TemplateWrapper';
+Header.displayName = 'Sc__Header';
+Counter.displayName = 'Sc__Counter';
+ButtonGroup.displayName = 'Sc__ButtonGroup';
+Button.displayName = 'Sc__Button';
+Footer.displayName = 'Sc__Footer';
+Caption.displayName = 'Sc__Caption';
+
+export {
+  Wrapper,
+  Header,
+  Counter,
+  ButtonGroup,
+  Button,
+  Footer,
+  Caption,
+};

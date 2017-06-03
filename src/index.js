@@ -4,7 +4,7 @@ import ItemHolder from './components/itemHolder';
 import UITemplate from './components/ui-template';
 import ErrorBox from './components/itemHolder/components/errorBox';
 import { Wrapper, Overlay, Container } from './styled';
-import { getScrollY, isDomElement } from './utils';
+import { getScrollY, isDomElement, isMobileDevice } from './utils';
 import { on, off } from './utils/event';
 import {
   PAN_FRICTION_LEVEL,
@@ -20,17 +20,13 @@ import { animate } from './utils/animation';
 export default class PhotoSwipe extends Component {
   constructor(props) {
     super(props);
+    if (!('ontouchstart' in window)) {
+      console.error('React-Photo-Swipe only support touchable mobile device.'); // eslint-disable-line
+    }
     this.indexDiff = 0;
     this.scrollYOffset = null;
     this.viewportSize = { width: window.innerWidth, height: window.innerHeight };
     this.loadedItems = [];
-    this.state = {
-      open: false,
-      currIndex: props.initIndex,
-      itemHolders: undefined,
-      loaded: false,
-      isTemplateOpen: false,
-    };
     this.closeItemHolders = this.closeItemHolders.bind(this);
     this.handleViewChange = this.handleViewChange.bind(this);
     this.handleItemTap = this.handleItemTap.bind(this);
@@ -46,6 +42,13 @@ export default class PhotoSwipe extends Component {
     this.handleItemReset = this.handleItemReset.bind(this);
     this.handleBeforeItemZoomOut = this.handleBeforeItemZoomOut.bind(this);
     this.handleAfterItemZoomOut = this.handleAfterItemZoomOut.bind(this);
+    this.state = {
+      open: false,
+      currIndex: props.initIndex,
+      itemHolders: this.initItemHolders(props),
+      loaded: false,
+      isTemplateOpen: false,
+    };
   }
 
   componentDidMount() {
@@ -98,8 +101,8 @@ export default class PhotoSwipe extends Component {
     return itemIndex;
   }
 
-  get wrapperXPos() {
-    return -Math.round(this.indexDiff * this.viewportSize.width * (1 + this.props.spacing));
+  getHorizOffset(indexDiff) {
+    return -Math.round(indexDiff * this.viewportSize.width * (1 + this.props.spacing));
   }
 
   applyContainerTransform(x, y) {
@@ -115,7 +118,7 @@ export default class PhotoSwipe extends Component {
         item={items[itemIndex]}
         itemIndex={itemIndex}
         currIndex={currIndex}
-        indexDiff={indexDiff}
+        horizOffset={-this.getHorizOffset(indexDiff)}
         viewportSize={this.viewportSize}
         overlay={this.overlay}
         onTap={this.handleItemTap}
@@ -242,17 +245,18 @@ export default class PhotoSwipe extends Component {
     const { items, loop } = this.props;
     const { currIndex } = this.state;
     if (direction === DIRECTION_HORZ) {
+      const horizOffset = this.getHorizOffset(this.indexDiff);
       if (!loop || items.length < 3) {
         if (
           (delta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
           (delta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
-          const xPos = Math.round(this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL));
+          const xPos = Math.round(horizOffset + (delta.accX * PAN_FRICTION_LEVEL));
           this.applyContainerTransform(xPos, 0);
           return;
         }
       }
-      const xPos = this.wrapperXPos + delta.accX;
+      const xPos = horizOffset + delta.accX;
       this.applyContainerTransform(xPos, 0);
     }
   }
@@ -266,18 +270,20 @@ export default class PhotoSwipe extends Component {
           (direction === DIRECTION_RIGHT && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
           (direction === DIRECTION_LEFT && this.getItemIndex(this.state.currIndex + 1) === undefined)
         ) {
-          const startXPos = Math.round(this.wrapperXPos + (delta.accX * PAN_FRICTION_LEVEL));
-          const endXPos = this.wrapperXPos;
+          const horizOffset = this.getHorizOffset(this.indexDiff);
+          const startXPos = Math.round(horizOffset + (delta.accX * PAN_FRICTION_LEVEL));
+          const endXPos = horizOffset;
           this.requestContainerAnimation(startXPos, endXPos, true);
           return;
         }
       }
       if ((velocity > swipeVelocity) || (Math.abs(delta.accX) > this.viewportSize.width * 0.5)) {
-        const startXPos = this.wrapperXPos + delta.accX;
+        const horizOffset = this.getHorizOffset(this.indexDiff);
+        const startXPos = horizOffset + delta.accX;
         const isToLeft = direction === DIRECTION_LEFT;
         if (isToLeft) this.indexDiff += 1;
         else this.indexDiff -= 1;
-        const endXPos = this.wrapperXPos; // Need update this.indexDiff in advance
+        const endXPos = this.getHorizOffset(this.indexDiff);
         this.props.beforeChange && this.props.beforeChange(this.state.currIndex);
         this.requestContainerAnimation(startXPos, endXPos, false, () => {
           this.setState((prevState) => {
@@ -302,8 +308,9 @@ export default class PhotoSwipe extends Component {
           }, () => this.props.afterChange && this.props.afterChange(this.state.currIndex));
         });
       } else {
-        const startXPos = this.wrapperXPos + delta.accX;
-        const endXPos = this.wrapperXPos;
+        const horizOffset = this.getHorizOffset(this.indexDiff);
+        const startXPos = horizOffset + delta.accX;
+        const endXPos = horizOffset;
         this.requestContainerAnimation(startXPos, endXPos, true);
       }
     }
@@ -328,7 +335,7 @@ export default class PhotoSwipe extends Component {
     }
     // We load three items at the same time after initItemHolders,
     // but set loaded state true immediately when current item loaded.
-    if (itemIndex === this.state.currIndex) {
+    if (this.props.template && itemIndex === this.state.currIndex) {
       this.setState({ loaded: true });
     }
   }
@@ -370,12 +377,12 @@ export default class PhotoSwipe extends Component {
   }
 
   render() {
-    const { items, initIndex, template } = this.props;
+    const { items, template } = this.props;
     return (
       <Wrapper open={this.state.open}>
         <Overlay innerRef={(node) => { this.overlay = node; }} />
         <Container innerRef={(node) => { this.container = node; }}>
-          { initIndex !== undefined && this.state.itemHolders }
+          { this.state.itemHolders }
         </Container>
         {
           React.isValidElement(template)

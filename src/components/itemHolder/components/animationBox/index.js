@@ -5,6 +5,7 @@ import { Wrapper, CroppedBox, VisibleBox, Image, PlaceHolder } from './styled';
 const AnimationBox = (props) => {
   const {
     initPos,
+    animating,
     item,
     fitDimension,
     loadError,
@@ -15,17 +16,19 @@ const AnimationBox = (props) => {
     imageRef,
     onImageLoad,
   } = props;
+  const longSide = Math.max(fitDimension.width, fitDimension.height);
   return (
     <Wrapper
       style={{ transform: `translate3d(${initPos.x}px, ${initPos.y}px, 0px)` }}
       innerRef={rootRef}
     >
       <CroppedBox
-        side={Math.max(fitDimension.width, fitDimension.height)}
+        side={longSide}
+        animating={animating}
         innerRef={croppedBoxRef}
       >
         <VisibleBox
-          side={Math.max(fitDimension.width, fitDimension.height)}
+          side={longSide}
           shape={item.width > item.height ? 'landscape' : 'portrait'}
           innerRef={visibleBoxRef}
         >
@@ -61,6 +64,7 @@ AnimationBox.displayName = 'React-Photo-Swipe__AnimationBox';
 
 AnimationBox.propTypes = {
   initPos: PropTypes.object.isRequired,
+  animating: PropTypes.bool.isRequired,
   item: PropTypes.object.isRequired,
   fitDimension: PropTypes.object.isRequired,
   loadError: PropTypes.bool.isRequired,

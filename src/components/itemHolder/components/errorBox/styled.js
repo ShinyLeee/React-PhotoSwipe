@@ -1,7 +1,7 @@
 /* eslint-disable import/prefer-default-export */
 import styled from 'styled-components';
 
-export const Wrapper = styled.p`
+const Wrapper = styled.p`
   position: absolute;
   left: 0;
   top: 50%;
@@ -17,3 +17,9 @@ export const Wrapper = styled.p`
     text-decoration: underline;
   }
 `;
+
+Wrapper.displayName = 'Sc__ErrorBoxWrapper';
+
+export {
+  Wrapper,
+};

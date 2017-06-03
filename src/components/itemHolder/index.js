@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { PureComponent } from 'react';
 import PropTypes from 'prop-types';
 import AnimationBox from './components/animationBox';
 import EnhancedWrapper from './styled';
@@ -16,10 +16,11 @@ import {
 import { getEmptyPoint, isDomElement } from '../../utils';
 import { animate } from '../../utils/animation';
 
-export default class ItemHolder extends Component {
+export default class ItemHolder extends PureComponent {
   constructor(props) {
     super(props);
     this.state = {
+      animating: true,
       loaded: false,
       loadError: false,
     };
@@ -48,7 +49,7 @@ export default class ItemHolder extends Component {
   }
 
   componentDidMount() {
-    if (this.isCurrentSlide) {
+    if (this.props.open && this.isCurrentSlide) {
       this.props.beforeZoomIn(true); // initial zoom in
       this.requestInAnimation(() => this.props.afterZoomIn(true));
     }
@@ -59,15 +60,21 @@ export default class ItemHolder extends Component {
       if (nextProps.closing && this.isCurrentSlide) {
         this.props.beforeZoomOut();
         const initCenterPos = this.getAnimWrapperCenterPos();
-        const start = { x: initCenterPos.x, y: initCenterPos.y, scale: 1, opacity: 1 };
+        const start = { x: initCenterPos.x, y: initCenterPos.y, croppedScale: nextProps.cropped && 1, scale: 1, opacity: 1 };
         const outType = nextProps.sourceElement !== undefined ? OUT_TYPE_ZOOM : OUT_TYPE_SWIPE_DOWN;
-        this.requestOutAnimation(start, outType, () => this.resetZoomStatus(true));
+        this.setState({ animating: true }, this.requestOutAnimation(start, outType, () => this.resetZoomStatus(true)));
       }
     }
   }
 
-  shouldComponentUpdate() {
-    return true; // TODO
+  shouldComponentUpdate(nextProps, nextState) {
+    return nextProps.open !== this.props.open ||
+    nextState.animating !== this.state.animating ||
+    nextState.loadError !== this.state.loadError ||
+    nextProps.itemIndex !== this.props.itemIndex ||
+    nextProps.currIndex !== this.props.currIndex ||
+    nextProps.horizOffset !== this.props.horizOffset ||
+    nextProps.errorBox !== this.props.errorBox;
   }
 
   componentDidUpdate(prevProps) {
@@ -129,11 +136,6 @@ export default class ItemHolder extends Component {
 
   get isCurrentSlide() {
     return this.props.itemIndex === this.props.currIndex;
-  }
-
-  get wrapperXPos() {
-    const { indexDiff, viewportSize, spacing } = this.props;
-    return Math.round(indexDiff * viewportSize.width * (1 + spacing));
   }
 
   get fitRatio() {
@@ -265,7 +267,7 @@ export default class ItemHolder extends Component {
           this.applyOverlayOpacity(pos);
         }
       },
-      () => callback && callback(),
+      () => this.setState({ animating: false }, callback()),
     );
   }
 
@@ -278,8 +280,8 @@ export default class ItemHolder extends Component {
       end = {
         x: thumbRect.left,
         y: thumbRect.top,
+        croppedScale: cropped && shortRectSide / this.longSide,
         scale: shortRectSide / this.shortSide,
-        croppedScale: shortRectSide / this.longSide,
         opacity: 0,
       };
     } else if (outType === OUT_TYPE_SWIPE_UP || outType === OUT_TYPE_SWIPE_DOWN) {
@@ -312,6 +314,7 @@ export default class ItemHolder extends Component {
   }
 
   requestZoomAnimation(currScale, nextScale, currPos, nextPos) {
+    if (this.fitRatio > 1) return;
     const bounds = this.getItemBounds(nextScale);
     const offset = this.calculateOffset(nextPos, bounds);
 
@@ -524,7 +527,7 @@ export default class ItemHolder extends Component {
                         ? OUT_TYPE_ZOOM
                         : e.direction === DIRECTION_UP ? OUT_TYPE_SWIPE_UP : OUT_TYPE_SWIPE_DOWN;
         this.props.beforeZoomOut();
-        this.requestOutAnimation(start, outType, () => this.resetZoomStatus(true));
+        this.setState({ animating: true }, this.requestOutAnimation(start, outType, () => this.resetZoomStatus(true)));
       } else {
         this.requestResetAnimation(start, () => this.props.afterReset('panEnd'));
       }
@@ -589,7 +592,7 @@ export default class ItemHolder extends Component {
       const start = Object.assign({}, currPos, { scale: currScale, opacity: pivotScale });
       if (pivotScale < pinchToCloseThreshold && sourceElement !== undefined) {
         this.props.beforeZoomOut();
-        this.requestOutAnimation(start, OUT_TYPE_ZOOM, () => this.resetZoomStatus(true));
+        this.setState({ animating: true }, this.requestOutAnimation(start, OUT_TYPE_ZOOM, () => this.resetZoomStatus(true)));
       } else if (pivotScale < 1) {
         this.requestResetAnimation(start, () => {
           this.resetZoomStatus(false);
@@ -615,17 +618,19 @@ export default class ItemHolder extends Component {
     this.props.onPinchEnd(e, this.isZoom);
   }
 
-  handleImageLoad(error) {
-    this.setState({ loaded: true, loadError: error });
-    this.props.onItemLoad(this.props.itemIndex);
+  handleImageLoad(err) {
+    setTimeout(() => {
+      this.setState({ loaded: true, loadError: err });
+      this.props.onItemLoad(this.props.itemIndex);
+    }, this.props.showHideDuration);
   }
 
   render() {
-    const { open, item, errorBox } = this.props;
+    const { open, item, horizOffset, errorBox } = this.props;
     return (
       <EnhancedWrapper
         shouldBind={open && this.isCurrentSlide}
-        style={{ transform: `translate3d(${this.wrapperXPos}px, 0px, 0px)` }}
+        style={{ transform: `translate3d(${horizOffset}px, 0px, 0px)` }}
         onTap={this.handleTap}
         onDoubleTap={this.handleDoubleTap}
         onPanStart={this.handlePanStart}
@@ -637,6 +642,7 @@ export default class ItemHolder extends Component {
       >
         <AnimationBox
           initPos={this.getAnimWrapperCenterPos()}
+          animating={this.state.animating}
           item={item}
           fitDimension={this.getItemDimension()}
           loadError={this.state.loadError}
@@ -664,7 +670,7 @@ ItemHolder.propTypes = {
   item: PropTypes.object.isRequired,
   itemIndex: PropTypes.number.isRequired,
   currIndex: PropTypes.number.isRequired,
-  indexDiff: PropTypes.number.isRequired,
+  horizOffset: PropTypes.number.isRequired,
   viewportSize: PropTypes.object.isRequired,
   cropped: PropTypes.bool.isRequired,
   sourceElement: isDomElement,

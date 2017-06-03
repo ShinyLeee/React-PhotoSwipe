@@ -6,8 +6,8 @@ const RootApp = ({ routes }) => (
   <Router>
     <div>
       <header>
-        <h1>React-Photo-Swipe</h1>
-        <small>Pure react component no dependencies, inspired by&nbsp;
+        <h1>React-PhotoSwipe</h1>
+        <small>Pure react image gallery component for mobile device, inspired by&nbsp;
           <a href="http://photoswipe.com/" target="_blank" rel="noopener noreferrer">PhotoSwipe</a>
         </small>
       </header>

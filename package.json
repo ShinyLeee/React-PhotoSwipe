@@ -55,6 +55,6 @@
   },
   "dependencies": {
     "prop-types": "^15.5.10",
-    "styled-components": "^1.4.4"
+    "styled-components": "^2.0.0"
   }
 }

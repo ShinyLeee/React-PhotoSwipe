@@ -1,6 +1,6 @@
 import styled from 'styled-components';
 
-export const Wrapper = styled.div`
+const Wrapper = styled.div`
   display: ${props => (props.open ? 'block' : 'none')};
   position: fixed;
   width: 100%;
@@ -15,7 +15,7 @@ export const Wrapper = styled.div`
   overflow: hidden;
 `;
 
-export const Overlay = styled.div`
+const Overlay = styled.div`
   position: absolute;
   left: 0;
   top: 0;
@@ -26,7 +26,7 @@ export const Overlay = styled.div`
   opacity: 0;
 `;
 
-export const Container = styled.div`
+const Container = styled.div`
   position: absolute;
   left: 0;
   right: 0;
@@ -36,3 +36,13 @@ export const Container = styled.div`
   touch-action: none;
   transform: translate3d(0px, 0px, 0px);
 `;
+
+Wrapper.displayName = 'Sc__Wrapper';
+Overlay.displayName = 'Sc__Overlay';
+Container.displayName = 'Sc__Container';
+
+export {
+  Wrapper,
+  Overlay,
+  Container,
+};
