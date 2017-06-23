@@ -29,5 +29,3 @@ export const isDomElement = (props, propName, componentName) => {
   }
   return null;
 };
-
-export const isMobileDevice = () => (typeof window.orientation !== 'undefined') || (navigator.userAgent.indexOf('IEMobile') !== -1);

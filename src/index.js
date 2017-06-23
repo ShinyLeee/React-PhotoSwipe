@@ -4,7 +4,7 @@ import ItemHolder from './components/itemHolder';
 import UITemplate from './components/ui-template';
 import ErrorBox from './components/itemHolder/components/errorBox';
 import { Wrapper, Overlay, Container } from './styled';
-import { getScrollY, isDomElement, isMobileDevice } from './utils';
+import { getScrollY, isDomElement } from './utils';
 import { on, off } from './utils/event';
 import {
   PAN_FRICTION_LEVEL,
@@ -21,7 +21,7 @@ export default class PhotoSwipe extends Component {
   constructor(props) {
     super(props);
     if (!('ontouchstart' in window)) {
-      console.error('React-Photo-Swipe only support touchable mobile device.'); // eslint-disable-line
+      console.error('React-PhotoSwipe only support touchable mobile device.'); // eslint-disable-line
     }
     this.indexDiff = 0;
     this.scrollYOffset = null;
@@ -171,15 +171,57 @@ export default class PhotoSwipe extends Component {
     return this.updateItemHolders(itemHolders, { currIndex: nextIndex });
   }
 
-  requestContainerAnimation(startXPos, endXPos, bounceBack, callback) {
+  requestBackAnimation(deltaX) {
+    const horizOffset = this.getHorizOffset(this.indexDiff);
+    const startXPos = Math.round(horizOffset + deltaX);
+    const endXPos = horizOffset;
     animate(
-      'container__Swipe',
+      'container__Back',
       startXPos,
       endXPos,
-      bounceBack ? BOUNCE_BACK_DURATION : SWIPE_TO_DURATION,
-      bounceBack ? 'sineOut' : 'easeOutCubic',
+      BOUNCE_BACK_DURATION,
+      'sineOut',
       pos => this.applyContainerTransform(pos, 0),
-      () => callback && callback(),
+    );
+  }
+
+  requestSwipeToAnimation(deltaX, direction) {
+    const { items } = this.props;
+    const horizOffset = this.getHorizOffset(this.indexDiff);
+    const startXPos = horizOffset + deltaX;
+    if (direction === DIRECTION_LEFT) this.indexDiff += 1;
+    else this.indexDiff -= 1;
+    const endXPos = this.getHorizOffset(this.indexDiff);
+    this.props.beforeChange && this.props.beforeChange(this.state.currIndex);
+    animate(
+      'container__SwipeTo',
+      startXPos,
+      endXPos,
+      SWIPE_TO_DURATION,
+      'easeOutCubic',
+      pos => this.applyContainerTransform(pos, 0),
+      () => {
+        this.setState((prevState) => {
+          const indexDiff = direction === DIRECTION_LEFT ? 1 : -1;
+          const nextIndex = direction === DIRECTION_LEFT
+                            ? this.getItemIndex(prevState.currIndex + 1)
+                            : this.getItemIndex(prevState.currIndex - 1);
+          const replIndex = direction === DIRECTION_LEFT
+                            ? this.getItemIndex(prevState.currIndex - 1)
+                            : this.getItemIndex(prevState.currIndex + 1);
+          const appdIndex = direction === DIRECTION_LEFT
+                            ? this.getItemIndex(prevState.currIndex + 2)
+                            : this.getItemIndex(prevState.currIndex - 2);
+          const nextItemHolders = items.length < 3
+          ? this.updateItemHolders(prevState.itemHolders, { currIndex: nextIndex })
+          : this.replaceItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex);
+          return {
+            currIndex: nextIndex,
+            itemHolders: nextItemHolders,
+            loaded: this.loadedItems.indexOf(nextIndex) > -1,
+          };
+        }, () => this.props.afterChange && this.props.afterChange(this.state.currIndex));
+      },
     );
   }
 
@@ -241,77 +283,48 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  handleItemPan({ direction, delta }) {
+  handleItemPan(e) {
     const { items, loop } = this.props;
     const { currIndex } = this.state;
-    if (direction === DIRECTION_HORZ) {
+    if (e.direction === DIRECTION_HORZ) {
       const horizOffset = this.getHorizOffset(this.indexDiff);
       if (!loop || items.length < 3) {
         if (
-          (delta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
-          (delta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
+          (e.delta.accX > 0 && this.getItemIndex(currIndex - 1) === undefined) ||
+          (e.delta.accX < 0 && this.getItemIndex(currIndex + 1) === undefined)
         ) {
-          const xPos = Math.round(horizOffset + (delta.accX * PAN_FRICTION_LEVEL));
+          const xPos = Math.round(horizOffset + (e.delta.accX * PAN_FRICTION_LEVEL));
           this.applyContainerTransform(xPos, 0);
           return;
         }
       }
-      const xPos = horizOffset + delta.accX;
+      const xPos = horizOffset + e.delta.accX;
       this.applyContainerTransform(xPos, 0);
     }
   }
 
-  handleItemPanEnd(e, isZoom) {
-    const { direction, delta, velocity } = e;
-    const { items, loop, swipeVelocity } = this.props;
-    if (!isZoom && (direction === DIRECTION_LEFT || direction === DIRECTION_RIGHT)) {
+  handleItemPanEnd(e, isZoom, outOfBounds) {
+    const { items, loop, allowPanToNext, swipeVelocity } = this.props;
+    if (e.direction === DIRECTION_LEFT || e.direction === DIRECTION_RIGHT) {
       if (!loop || items.length < 3) {
         if (
-          (direction === DIRECTION_RIGHT && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
-          (direction === DIRECTION_LEFT && this.getItemIndex(this.state.currIndex + 1) === undefined)
+          (e.direction === DIRECTION_RIGHT && this.getItemIndex(this.state.currIndex - 1) === undefined) ||
+          (e.direction === DIRECTION_LEFT && this.getItemIndex(this.state.currIndex + 1) === undefined)
         ) {
-          const horizOffset = this.getHorizOffset(this.indexDiff);
-          const startXPos = Math.round(horizOffset + (delta.accX * PAN_FRICTION_LEVEL));
-          const endXPos = horizOffset;
-          this.requestContainerAnimation(startXPos, endXPos, true);
+          this.requestBackAnimation(e.delta.accX * PAN_FRICTION_LEVEL);
           return;
         }
       }
-      if ((velocity > swipeVelocity) || (Math.abs(delta.accX) > this.viewportSize.width * 0.5)) {
-        const horizOffset = this.getHorizOffset(this.indexDiff);
-        const startXPos = horizOffset + delta.accX;
-        const isToLeft = direction === DIRECTION_LEFT;
-        if (isToLeft) this.indexDiff += 1;
-        else this.indexDiff -= 1;
-        const endXPos = this.getHorizOffset(this.indexDiff);
-        this.props.beforeChange && this.props.beforeChange(this.state.currIndex);
-        this.requestContainerAnimation(startXPos, endXPos, false, () => {
-          this.setState((prevState) => {
-            const indexDiff = isToLeft ? 1 : -1;
-            const nextIndex = isToLeft
-                              ? this.getItemIndex(prevState.currIndex + 1)
-                              : this.getItemIndex(prevState.currIndex - 1);
-            const replIndex = isToLeft
-                              ? this.getItemIndex(prevState.currIndex - 1)
-                              : this.getItemIndex(prevState.currIndex + 1);
-            const appdIndex = isToLeft
-                              ? this.getItemIndex(prevState.currIndex + 2)
-                              : this.getItemIndex(prevState.currIndex - 2);
-            const nextItemHolders = items.length < 3
-            ? this.updateItemHolders(prevState.itemHolders, { currIndex: nextIndex })
-            : this.replaceItemHolders(prevState, indexDiff, nextIndex, replIndex, appdIndex);
-            return {
-              currIndex: nextIndex,
-              itemHolders: nextItemHolders,
-              loaded: this.loadedItems.indexOf(nextIndex) > -1,
-            };
-          }, () => this.props.afterChange && this.props.afterChange(this.state.currIndex));
-        });
-      } else {
-        const horizOffset = this.getHorizOffset(this.indexDiff);
-        const startXPos = horizOffset + delta.accX;
-        const endXPos = horizOffset;
-        this.requestContainerAnimation(startXPos, endXPos, true);
+      if (!isZoom) {
+        if ((e.velocity > swipeVelocity) || (Math.abs(e.delta.accX) > this.viewportSize.width * 0.5)) {
+          this.requestSwipeToAnimation(e.delta.accX, e.direction);
+        } else {
+          this.requestBackAnimation(e.delta.accX);
+        }
+      } else if (!allowPanToNext) {
+        this.requestBackAnimation(e.delta.accX);
+      } else if (outOfBounds.x) {
+        this.requestSwipeToAnimation(e.delta.accX, e.direction);
       }
     }
     this.props.onPanEnd && this.props.onPanEnd(e, isZoom);
@@ -425,6 +438,8 @@ PhotoSwipe.defaultProps = {
   // If a react element, render the react element.
   template: true,
 
+  allowPanToNext: false,
+
   // Default error box template when item cannot be loaded.
   errorBox: <ErrorBox />,
 
@@ -468,6 +483,7 @@ PhotoSwipe.propTypes = {
     PropTypes.bool,
     PropTypes.element,
   ]),
+  allowPanToNext: PropTypes.bool,
   errorBox: PropTypes.element,
   showHideDuration: PropTypes.number,
   spacing: PropTypes.number,
