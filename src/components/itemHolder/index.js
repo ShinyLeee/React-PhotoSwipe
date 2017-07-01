@@ -6,7 +6,6 @@ import EnhancedWrapper from './styled';
 import {
   PAN_FRICTION_LEVEL,
   ZOOM_FRICTION_LEVEL,
-  SWIPE_TO_DURATION,
   BOUNCE_BACK_DURATION,
   DIRECTION_VERT,
   DIRECTION_UP,
@@ -29,7 +28,7 @@ export default class ItemHolder extends PureComponent {
     const fitDimension = this.getItemDimension();
     this.longSide = Math.max(fitDimension.width, fitDimension.height);
     this.shortSide = Math.min(fitDimension.width, fitDimension.height);
-    this.initItemHolder();
+    this.initVariable();
     this.handleTap = this.handleTap.bind(this);
     this.handleDoubleTap = this.handleDoubleTap.bind(this);
     this.handlePanStart = this.handlePanStart.bind(this);
@@ -49,6 +48,11 @@ export default class ItemHolder extends PureComponent {
   }
 
   componentWillReceiveProps(nextProps) {
+    if (this.props.currIndex !== nextProps.currIndex) {
+      if (this.isZoom && this.isCurrentSlide) {
+        this.resetVariable();
+      }
+    }
     if (this.props.closing !== nextProps.closing) {
       if (nextProps.closing && this.isCurrentSlide) {
         this.props.beforeZoomOut();
@@ -94,7 +98,6 @@ export default class ItemHolder extends PureComponent {
     };
   }
 
-  // item bounds position
   getItemBounds(scale) {
     const { viewportSize } = this.props;
     const itemDimension = this.getItemDimension(this.isZoom);
@@ -144,6 +147,10 @@ export default class ItemHolder extends PureComponent {
     return hRatio < vRatio ? hRatio : vRatio;
   }
 
+  get canItemPerformZoom() {
+    return !(this.fitRatio > 1 || !this.state.loaded || this.state.loadError);
+  }
+
   applyOverlayOpacity(opacity) {
     this.props.overlay.style.opacity = opacity;
   }
@@ -165,16 +172,25 @@ export default class ItemHolder extends PureComponent {
     }
   }
 
-  calculateOffset(currPos, bound) { // eslint-disable-line class-methods-use-this
+  calculateBoundsStatus(currPos, scale) {
+    const bounds = this.getItemBounds(scale);
+    const left = currPos.x - bounds.x.left;
+    const right = currPos.x - bounds.x.right;
+    const top = currPos.y - bounds.y.top;
+    const bottom = currPos.y - bounds.y.bottom;
     return {
-      left: currPos.x - bound.x.left, // left < 0 means overflow left bound
-      right: currPos.x - bound.x.right, // right > 0 means overflow right bound
-      top: currPos.y - bound.y.top, // top < 0 means overflow top bound
-      bottom: currPos.y - bound.y.bottom, // bottom > 0 means overflow bottom bound
+      bounds,
+      boundsDiff: { left, right, top, bottom },
+      outOfBounds: {
+        left: left > 0,
+        right: right < 0,
+        top: top > 0,
+        bottom: bottom < 0,
+      },
     };
   }
 
-  calculatePinchDelta(initCenter, center, scale) {
+  calculatePinchDelta(initCenter, currCenter, scale) {
     const { viewportSize } = this.props;
     const screenCenter = {
       x: Math.round(viewportSize.width * 0.5),
@@ -185,8 +201,8 @@ export default class ItemHolder extends PureComponent {
       y: screenCenter.y - initCenter.y,
     };
     const offset = {
-      x: center.x - initCenter.x,
-      y: center.y - initCenter.y,
+      x: currCenter.x - initCenter.x,
+      y: currCenter.y - initCenter.y,
     };
     const ratio = scale > 1 ? scale - 1 : 1 - scale;
     return {
@@ -208,16 +224,17 @@ export default class ItemHolder extends PureComponent {
     return toZoomScale ? scale * fitRatio : scale * (1 / fitRatio);
   }
 
-  initItemHolder() {
-    this.resetItemHolder(false, true);
+  initVariable() {
+    this.resetVariable(false, true);
   }
 
-  resetItemHolder(isOut = false, isInit = false) {
+  resetVariable(isOut = false, isInit = false) {
     const initCenterPos = this.getAnimWrapperCenterPos();
     this.isZoom = false;
+    this.initBoundsDiff = undefined;
     this.outOfBounds = { x: false, y: false };
-    this.boundOffset = undefined; // only use when zoomed
     this.isPanToNext = false;
+    this.containerDelta = undefined;
     this.scaleRatio = undefined;
     this.currScale = 1; // real scale that manipulate item style
     this.currPos = this.getAnimWrapperCenterPos(); // Previous position for zoom gesture
@@ -324,35 +341,32 @@ export default class ItemHolder extends PureComponent {
           this.applyCroppedBoxTransform(ratio, reverseRatio);
         }
       },
-      () => this.resetItemHolder(true),
+      () => this.resetVariable(true),
     );
   }
 
   requestZoomAnimation(start, end) {
-    if (this.fitRatio > 1) return;
-    const bounds = this.getItemBounds(end.scale);
-    const offset = this.calculateOffset({ x: end.x, y: end.y }, bounds);
-
     const nextCenterPos = this.getAnimWrapperCenterPos(end.scale, this.isZoom);
+    const { bounds, boundsDiff, outOfBounds } = this.calculateBoundsStatus({ x: end.x, y: end.y }, end.scale);
 
-    if ((offset.left === offset.right) || (offset.left > 0 && offset.right < 0)) {
+    if ((boundsDiff.left === boundsDiff.right) || (outOfBounds.left && outOfBounds.right)) {
       end.x = nextCenterPos.x;
       this.preservedOffset.x = 0;
-    } else if (offset.left > 0 && offset.right > 0) {
+    } else if (outOfBounds.left && !outOfBounds.right) {
       end.x = bounds.x.left;
       this.preservedOffset.x = -nextCenterPos.x;
-    } else if (offset.left < 0 && offset.right < 0) {
+    } else if (!outOfBounds.left && outOfBounds.right) {
       end.x = bounds.x.right;
       this.preservedOffset.x = nextCenterPos.x;
     }
 
-    if ((offset.top === offset.bottom) || (offset.top > 0 && offset.bottom < 0)) {
+    if ((boundsDiff.top === boundsDiff.bottom) || (outOfBounds.top && outOfBounds.bottom)) {
       end.y = nextCenterPos.y;
       this.preservedOffset.y = 0;
-    } else if (offset.top > 0 && offset.bottom > 0) {
+    } else if (outOfBounds.top && !outOfBounds.bottom) {
       end.y = bounds.y.top;
       this.preservedOffset.y = -nextCenterPos.y;
-    } else if (offset.top < 0 && offset.bottom < 0) {
+    } else if (!outOfBounds.top && outOfBounds.bottom) {
       end.y = bounds.y.bottom;
       this.preservedOffset.y = nextCenterPos.y;
     }
@@ -383,29 +397,28 @@ export default class ItemHolder extends PureComponent {
   }
 
   requestPanBackAnimation(currPos) {
-    const bounds = this.getItemBounds(this.currScale);
-    const offset = this.calculateOffset(currPos, bounds);
     const currCenterPos = this.getAnimWrapperCenterPos(this.currScale, true);
+    const { bounds, boundsDiff, outOfBounds } = this.calculateBoundsStatus(currPos, this.currScale);
 
     const start = Object.assign({}, currPos);
     const end = Object.assign({}, currPos);
 
-    if (offset.left > 0) {
-      start.x = Math.round(bounds.x.left + (offset.left * PAN_FRICTION_LEVEL));
+    if (outOfBounds.left) {
+      start.x = Math.round(bounds.x.left + (boundsDiff.left * PAN_FRICTION_LEVEL));
       end.x = bounds.x.left;
       this.preservedOffset.x = bounds.x.left - currCenterPos.x;
-    } else if (offset.right < 0) {
-      start.x = Math.round(bounds.x.right + (offset.right * PAN_FRICTION_LEVEL));
+    } else if (outOfBounds.right) {
+      start.x = Math.round(bounds.x.right + (boundsDiff.right * PAN_FRICTION_LEVEL));
       end.x = bounds.x.right;
       this.preservedOffset.x = bounds.x.right - currCenterPos.x;
     }
 
-    if (offset.top > 0) {
-      start.y = Math.round(bounds.y.top + (offset.top * PAN_FRICTION_LEVEL));
+    if (outOfBounds.top) {
+      start.y = Math.round(bounds.y.top + (boundsDiff.top * PAN_FRICTION_LEVEL));
       end.y = bounds.y.top;
       this.preservedOffset.y = bounds.y.top - currCenterPos.y;
-    } else if (offset.bottom < 0) {
-      start.y = Math.round(bounds.y.bottom + (offset.bottom * PAN_FRICTION_LEVEL));
+    } else if (outOfBounds.bottom) {
+      start.y = Math.round(bounds.y.bottom + (boundsDiff.bottom * PAN_FRICTION_LEVEL));
       end.y = bounds.y.bottom;
       this.preservedOffset.y = bounds.y.bottom - currCenterPos.y;
     }
@@ -417,10 +430,11 @@ export default class ItemHolder extends PureComponent {
       'sineOut',
       pos => this.applyAnimationBoxTransform(pos.x, pos.y, this.currScale),
       () => {
+        this.initBoundsDiff = undefined;
+        this.outOfBounds = { x: false, y: false };
+        this.isPanToNext = false;
         this.currPos.x = end.x;
         this.currPos.y = end.y;
-        this.outOfBounds = { x: false, y: false };
-        this.boundOffset = undefined;
       },
     );
   }
@@ -441,7 +455,7 @@ export default class ItemHolder extends PureComponent {
       },
       () => {
         if (resetType !== 'pan') {
-          this.resetItemHolder(false);
+          this.resetVariable();
         }
         this.props.afterReset(resetType);
       },
@@ -453,7 +467,7 @@ export default class ItemHolder extends PureComponent {
   }
 
   handleDoubleTap(e) {
-    if (!this.state.loaded || this.state.loadError) return;
+    if (!this.canItemPerformZoom) return;
     if (this.isZoom) {
       const currScale = Math.min(this.currScale, this.props.maxZoomScale);
       const start = Object.assign({}, this.currPos, { scale: currScale });
@@ -474,32 +488,35 @@ export default class ItemHolder extends PureComponent {
   }
 
   handlePanStart(e) {
-    const bounds = this.getItemBounds(this.currScale);
-    const offset = this.calculateOffset(this.currPos, bounds);
-    this.boundOffset = offset;
+    const { allowPanToNext } = this.props;
+    if (allowPanToNext) {
+      const { boundsDiff } = this.calculateBoundsStatus(this.currPos, this.currScale);
+      this.initBoundsDiff = boundsDiff;
+    }
     this.props.onPanStart(e, this.isZoom);
   }
 
   handlePan(e) {
     const { allowPanToNext, viewportSize } = this.props;
     if (this.isZoom) {
-      let currXPos = this.currPos.x + e.delta.accX;
-      let currYPos = this.currPos.y + e.delta.accY;
-      const bounds = this.getItemBounds(this.currScale);
-      const offset = this.calculateOffset({ x: currXPos, y: currYPos }, bounds);
-      this.outOfBounds.x = offset.left > 0 || offset.right < 0;
-      this.outOfBounds.y = offset.top > 0 || offset.bottom < 0;
+      const currPos = {
+        x: this.currPos.x + e.delta.accX,
+        y: this.currPos.y + e.delta.accY,
+      };
+      const { bounds, boundsDiff, outOfBounds } = this.calculateBoundsStatus(currPos, this.currScale);
+      this.outOfBounds.x = outOfBounds.left || outOfBounds.right;
+      this.outOfBounds.y = !this.isPanToNext && (outOfBounds.top || outOfBounds.bottom);
 
       const addFriction = () => {
-        if (offset.left > 0) {
-          currXPos = Math.round(bounds.x.left + (offset.left * PAN_FRICTION_LEVEL));
-        } else if (offset.right < 0) {
-          currXPos = Math.round(bounds.x.right + (offset.right * PAN_FRICTION_LEVEL));
+        if (outOfBounds.left) {
+          currPos.x = Math.round(bounds.x.left + (boundsDiff.left * PAN_FRICTION_LEVEL));
+        } else if (outOfBounds.right) {
+          currPos.x = Math.round(bounds.x.right + (boundsDiff.right * PAN_FRICTION_LEVEL));
         }
-        if (offset.top > 0) {
-          currYPos = Math.round(bounds.y.top + (offset.top * PAN_FRICTION_LEVEL));
-        } else if (offset.bottom < 0) {
-          currYPos = Math.round(bounds.y.bottom + (offset.bottom * PAN_FRICTION_LEVEL));
+        if (outOfBounds.top) {
+          currPos.y = Math.round(bounds.y.top + (boundsDiff.top * PAN_FRICTION_LEVEL));
+        } else if (outOfBounds.bottom) {
+          currPos.y = Math.round(bounds.y.bottom + (boundsDiff.bottom * PAN_FRICTION_LEVEL));
         }
       };
 
@@ -507,20 +524,28 @@ export default class ItemHolder extends PureComponent {
         if (!allowPanToNext) addFriction();
         else if (this.isPanToNext || !this.outOfBounds.y) {
           this.isPanToNext = true;
-          if (offset.left > 0) {
-            currXPos = bounds.x.left;
-            e.delta.accX += this.boundOffset.left;
-          } else if (offset.right < 0) {
-            currXPos = bounds.x.right;
-            e.delta.accX += this.boundOffset.right;
+          if (outOfBounds.left) {
+            currPos.x = bounds.x.left;
+            e.delta.accX += this.initBoundsDiff.left;
+          } else if (outOfBounds.right) {
+            currPos.x = bounds.x.right;
+            e.delta.accX += this.initBoundsDiff.right;
+          } else {
+            const isBackFromLeft = Math.abs(boundsDiff.left) < Math.abs(boundsDiff.right);
+            const newXPos = isBackFromLeft
+                            ? e.delta.accX + this.initBoundsDiff.left
+                            : e.delta.accX + this.initBoundsDiff.right;
+            currPos.x = newXPos;
+            e.delta.accX = newXPos;
           }
+          this.containerDelta = e.delta.accX;
           this.props.onPan(e, this.isZoom);
           return;
         } else if (this.outOfBounds.y) {
           addFriction();
         }
       }
-      this.applyAnimationBoxTransform(currXPos, currYPos, this.currScale);
+      this.applyAnimationBoxTransform(currPos.x, currPos.y, this.currScale);
     } else {
       if (e.direction === DIRECTION_VERT) {
         const absAccY = Math.abs(e.delta.accY);
@@ -535,29 +560,26 @@ export default class ItemHolder extends PureComponent {
 
   // TODO add scrolling animation to zoomed item after swipe
   handlePanEnd(e) {
-    const { allowPanToNext } = this.props;
+    const { allowPanToNext, viewportSize, sourceElement, spacing, swipeVelocity } = this.props;
     if (this.isZoom) {
+      this.currPos.x += e.delta.accX;
+      this.currPos.y += e.delta.accY;
       this.preservedOffset.x += e.delta.accX;
       this.preservedOffset.y += e.delta.accY;
-      if (this.outOfBounds.x || this.outOfBounds.y || this.isPanToNext) {
-        const currPos = {
-          x: this.currPos.x + e.delta.accX,
-          y: this.currPos.y + e.delta.accY,
-        };
-        if (!allowPanToNext) this.requestPanBackAnimation(currPos);
-        else if (this.isPanToNext || !this.outOfBounds.y) {
-          this.props.onPanEnd(e, this.isZoom, this.outOfBounds);
-          setTimeout(this.resetItemHolder(false), SWIPE_TO_DURATION);
+      if (this.isPanToNext || this.outOfBounds.x || this.outOfBounds.y) {
+        if (!allowPanToNext || this.outOfBounds.y) {
+          this.requestPanBackAnimation(this.currPos);
+        } else if (this.isPanToNext || !this.outOfBounds.y) {
+          const shouldPanToNext = (e.velocity > swipeVelocity) || (this.containerDelta > viewportSize.width * spacing);
+          if (!shouldPanToNext) {
+            this.requestPanBackAnimation(this.currPos);
+          }
+          e.delta.accX = this.containerDelta;
+          this.props.onPanEnd(e, this.isZoom, shouldPanToNext);
           return;
-        } else if (this.outOfBounds.y) {
-          this.requestPanBackAnimation(currPos);
         }
-      } else {
-        this.currPos.x += e.delta.accX;
-        this.currPos.y += e.delta.accY;
       }
     } else if (e.direction === DIRECTION_UP || e.direction === DIRECTION_DOWN) {
-      const { swipeVelocity, sourceElement, viewportSize } = this.props;
       const absVertDelta = Math.abs(e.delta.accY);
       const initCenterPos = this.getAnimWrapperCenterPos();
       const start = {
@@ -568,24 +590,26 @@ export default class ItemHolder extends PureComponent {
         opacity: Math.max(1 - (absVertDelta / viewportSize.height), 0),
       };
       if (e.velocity > swipeVelocity || (absVertDelta > viewportSize.height * 0.5)) {
-        const outType = sourceElement !== undefined // eslint-disable-line no-nested-ternary
-                        ? OUT_TYPE_ZOOM
-                        : e.direction === DIRECTION_UP ? OUT_TYPE_SWIPE_UP : OUT_TYPE_SWIPE_DOWN;
+        const outType = sourceElement === undefined // eslint-disable-line no-nested-ternary
+                        ? e.direction === DIRECTION_UP ? OUT_TYPE_SWIPE_UP : OUT_TYPE_SWIPE_DOWN
+                        : OUT_TYPE_ZOOM;
         this.props.beforeZoomOut();
         this.setState({ animating: true }, this.requestOutAnimation(start, outType));
       } else {
         this.requestResetAnimation(start, 'pan');
       }
     }
-    this.props.onPanEnd(e, this.isZoom, this.outOfBounds);
+    this.props.onPanEnd(e, this.isZoom);
   }
 
   handlePinchStart(e) {
-    this.props.onPinchStart(e, this.isZoom);
+    if (this.canItemPerformZoom) {
+      this.props.onPinchStart(e, this.isZoom);
+    }
   }
 
   handlePinch(e) {
-    if (!this.state.loaded || this.state.loadError) return;
+    if (!this.canItemPerformZoom) return;
     if (this.scaleRatio === undefined) {
       this.scaleRatio = this.currScale / e.scale;
     }
@@ -610,7 +634,7 @@ export default class ItemHolder extends PureComponent {
         this.maxEventScale = e.scale;
       }
       let slowScale = maxPivotScale + ((pivotScale - maxPivotScale) * ZOOM_FRICTION_LEVEL);
-      const slowZoomScale = this.maxEventScale + ((e.scale - this.maxEventScale) * ZOOM_FRICTION_LEVEL); // eslint-disable-line max-len
+      const slowZoomScale = this.maxEventScale + ((e.scale - this.maxEventScale) * ZOOM_FRICTION_LEVEL);
       const pinchDelta = this.calculatePinchDelta(e.initPinchCenter, e.pinchCenter, slowZoomScale);
       const nextPos = this.calculatePinchPosition(slowScale, pinchDelta);
       if (this.isZoom) {
@@ -622,7 +646,7 @@ export default class ItemHolder extends PureComponent {
   }
 
   handlePinchEnd(e) {
-    if (!this.state.loaded || this.state.loadError) return;
+    if (!this.canItemPerformZoom) return;
     const { sourceElement, pinchToCloseThreshold } = this.props;
     const currScale = this.currScale;
     const pivotScale = this.isZoom ? this.covertScale(currScale, false) : currScale;
@@ -718,7 +742,6 @@ ItemHolder.propTypes = {
   cropped: PropTypes.bool.isRequired,
   sourceElement: isDomElement,
   overlay: isDomElement,
-  loop: PropTypes.bool.isRequired,
   allowPanToNext: PropTypes.bool.isRequired,
   errorBox: PropTypes.element.isRequired,
   spacing: PropTypes.number.isRequired,

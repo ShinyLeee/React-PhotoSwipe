@@ -303,7 +303,7 @@ export default class PhotoSwipe extends Component {
     }
   }
 
-  handleItemPanEnd(e, isZoom, outOfBounds) {
+  handleItemPanEnd(e, isZoom, shouldPanToNext) {
     const { items, loop, allowPanToNext, swipeVelocity } = this.props;
     if (e.direction === DIRECTION_LEFT || e.direction === DIRECTION_RIGHT) {
       if (!loop || items.length < 3) {
@@ -321,10 +321,12 @@ export default class PhotoSwipe extends Component {
         } else {
           this.requestBackAnimation(e.delta.accX);
         }
-      } else if (!allowPanToNext) {
-        this.requestBackAnimation(e.delta.accX);
-      } else if (outOfBounds.x) {
-        this.requestSwipeToAnimation(e.delta.accX, e.direction);
+      } else if (allowPanToNext) {
+        if (shouldPanToNext) {
+          this.requestSwipeToAnimation(e.delta.accX, e.direction);
+        } else if (shouldPanToNext !== undefined) {
+          this.requestBackAnimation(e.delta.accX);
+        }
       }
     }
     this.props.onPanEnd && this.props.onPanEnd(e, isZoom);
@@ -438,7 +440,7 @@ PhotoSwipe.defaultProps = {
   // If a react element, render the react element.
   template: true,
 
-  allowPanToNext: false,
+  allowPanToNext: true,
 
   // Default error box template when item cannot be loaded.
   errorBox: <ErrorBox />,

@@ -1,22 +1,22 @@
 # React-PhotoSwipe
 
-A pure react photo gallery component inspired by [PhotoSwipe](https://github.com/dimsemenov/PhotoSwipe).
+一个面向移动端的纯React图片浏览组件， 受[PhotoSwipe](https://github.com/dimsemenov/PhotoSwipe)启发而编写。
 
-## Compare to PhotoSwipe
+## 与PhotoSwipe相比
 
-- Create your own UI-Template in React way
+- 支持放大、缩小经剪裁后的图片
 
-- Support zoom in / out cropped image
+- 支持以React组件的方式自定义UI-Template
 
-- Only support touchable mobile device temporarily
+- 面向移动端，体积更小
 
-## Caveat
+## 注意事项
 
-- React-PhotoSwipe is not ready for production.
+React-PhotoSwipe暂不适用于生产环境
 
 ## Demo
 
-You can check the [demo](https://shinyleee.github.io/React-PhotoSwipe-Demo/#/) here.
+你可以[在此](https://shinyleee.github.io/React-PhotoSwipe-Demo/#/)查看.
 
 ## License
 
