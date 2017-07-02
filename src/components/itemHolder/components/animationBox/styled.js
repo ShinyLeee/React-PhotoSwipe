@@ -13,7 +13,7 @@ const CroppedBox = styled.div`
   width: ${props => `${props.side}px`};
   height: ${props => `${props.side}px`};
   transform-origin: left top;
-  overflow: ${props => (props.animating ? 'hidden' : '')};
+  overflow: ${props => (props.animating ? 'hidden' : 'visible')};
 `;
 
 const VisibleBox = styled.div`

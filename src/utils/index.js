@@ -16,6 +16,10 @@ export const isValidPoint = point => (point.x !== null && point.y !== null);
 
 export const getScrollY = () => (window.pageYOffset || document.documentElement.scrollTop);
 
+export const isFn = fn => typeof fn === 'function' || false;
+
+export const isObj = obj => typeof obj === 'object' && !!obj;
+
 export const isClickableElement = element => (element.tagName === 'A' || element.tagName === 'BUTTON');
 
 export const isDomElement = (props, propName, componentName) => {

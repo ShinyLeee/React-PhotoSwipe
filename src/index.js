@@ -173,34 +173,34 @@ export default class PhotoSwipe extends Component {
 
   requestBackAnimation(deltaX) {
     const horizOffset = this.getHorizOffset(this.indexDiff);
-    const startXPos = Math.round(horizOffset + deltaX);
-    const endXPos = horizOffset;
-    animate(
-      'container__Back',
-      startXPos,
-      endXPos,
-      BOUNCE_BACK_DURATION,
-      'sineOut',
-      pos => this.applyContainerTransform(pos, 0),
-    );
+    const start = Math.round(horizOffset + deltaX);
+    const end = horizOffset;
+    animate({
+      name: 'container__Back',
+      start,
+      end,
+      duration: BOUNCE_BACK_DURATION,
+      easingType: 'sineOut',
+      onUpdate: pos => this.applyContainerTransform(pos, 0),
+    });
   }
 
   requestSwipeToAnimation(deltaX, direction) {
     const { items } = this.props;
     const horizOffset = this.getHorizOffset(this.indexDiff);
-    const startXPos = horizOffset + deltaX;
+    const start = horizOffset + deltaX;
     if (direction === DIRECTION_LEFT) this.indexDiff += 1;
     else this.indexDiff -= 1;
-    const endXPos = this.getHorizOffset(this.indexDiff);
+    const end = this.getHorizOffset(this.indexDiff);
     this.props.beforeChange && this.props.beforeChange(this.state.currIndex);
-    animate(
-      'container__SwipeTo',
-      startXPos,
-      endXPos,
-      SWIPE_TO_DURATION,
-      'easeOutCubic',
-      pos => this.applyContainerTransform(pos, 0),
-      () => {
+    animate({
+      name: 'container__SwipeTo',
+      start,
+      end,
+      duration: SWIPE_TO_DURATION,
+      easingType: 'easeOutCubic',
+      onUpdate: pos => this.applyContainerTransform(pos, 0),
+      onComplete: () => {
         this.setState((prevState) => {
           const indexDiff = direction === DIRECTION_LEFT ? 1 : -1;
           const nextIndex = direction === DIRECTION_LEFT
@@ -222,7 +222,7 @@ export default class PhotoSwipe extends Component {
           };
         }, () => this.props.afterChange && this.props.afterChange(this.state.currIndex));
       },
-    );
+    });
   }
 
   toggleTemplate(open) {

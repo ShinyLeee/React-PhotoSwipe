@@ -1,3 +1,4 @@
+import { isFn, isObj } from './index';
 import './rAF';
 
 const hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -48,10 +49,10 @@ export const rAF = (name, fn) => {
   }
 };
 
-export const animate = (name, start, end, duration, easingType, onUpdate, onComplete) => {
+export const animate = ({ name, start, end, duration, easingType, beforeUpdate, onUpdate, onComplete }) => {
   const done = () => {
     onUpdate(end);
-    if (onComplete !== undefined && typeof onComplete === 'function') {
+    if (isFn(onComplete)) {
       onComplete();
     }
   };
@@ -61,16 +62,16 @@ export const animate = (name, start, end, duration, easingType, onUpdate, onComp
   if (animations[name]) {
     let currentTime = 0;
 
-    const isMultiple = typeof start === 'object' && typeof end === 'object';
+    const isMultiple = isObj(start) && isObj(end);
 
-    const tick = () => {
+    const updateLoop = () => {
       currentTime += (1 / 60) * (1000 / duration);
 
       const p = currentTime;
       const t = easing[easingType](p);
 
       if (p < 1) {
-        animations[name].rAF = window.requestAnimationFrame(tick);
+        animations[name].rAF = window.requestAnimationFrame(updateLoop);
         if (!isMultiple) onUpdate(start + ((end - start) * t));
         else {
           const ret = {};
@@ -85,7 +86,9 @@ export const animate = (name, start, end, duration, easingType, onUpdate, onComp
         cancelAnimation(name);
       }
     };
-
-    tick();
+    if (isFn(beforeUpdate)) {
+      beforeUpdate();
+    }
+    updateLoop();
   }
 };
